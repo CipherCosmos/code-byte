@@ -2,8 +2,8 @@
   "name": "hackarena-backend",
   "version": "1.0.0",
   "description": "HackArena Backend API Server",
-  "main": "dist/server.js",
   "type": "module",
+  "main": "dist/server.js",
   "ts-node": {
     "esm": true,
     "experimentalSpecifierResolution": "node"

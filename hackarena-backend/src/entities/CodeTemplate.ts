@@ -1,5 +1,5 @@
 import { Entity, PrimaryColumn, Column, CreateDateColumn, ManyToOne, JoinColumn } from 'typeorm';
-import { SupportedLanguage } from './SupportedLanguage';
+import { SupportedLanguage } from './SupportedLanguage.js';
 
 @Entity('code_templates')
 export class CodeTemplate {

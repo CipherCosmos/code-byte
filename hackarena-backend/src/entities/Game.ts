@@ -1,8 +1,8 @@
 import { Entity, PrimaryColumn, Column, CreateDateColumn, UpdateDateColumn, ManyToOne, OneToMany, JoinColumn } from 'typeorm';
-import { User } from './User';
-import { Question } from './Question';
-import { Participant } from './Participant';
-import { GameSession } from './GameSession';
+import { User } from './User.js';
+import { Question } from './Question.js';
+import { Participant } from './Participant.js';
+import { GameSession } from './GameSession.js';
 
 @Entity('games')
 export class Game {

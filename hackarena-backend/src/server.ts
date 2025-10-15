@@ -4,7 +4,6 @@ import { Server } from 'socket.io';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import path from 'path';
-import { fileURLToPath } from 'url';
 import { AppDataSource } from './database/dataSource.js';
 import authRoutes from './routes/auth.js';
 import gameRoutes from './routes/games.js';
@@ -12,8 +11,7 @@ import participantRoutes from './routes/participants.js';
 import analyticsRoutes from './routes/analytics.js';
 import { setupSocketHandlers } from './socket/socketHandlers.js';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const __dirname = path.dirname(new URL(import.meta.url).pathname);
 
 // Load environment variables with diagnostic logging
 console.log('🔧 Loading environment variables...');
@@ -65,19 +63,22 @@ app.use(express.json());
 
 // Initialize Database with detailed logging
 console.log('🔧 Initializing database connection...');
-try {
-  await AppDataSource.initialize();
-  console.log('✅ Database connection established successfully');
-} catch (error) {
-  console.error('❌ Database connection failed:', error.message);
-  console.error('❌ Connection details:');
-  console.error('  - Host:', 'pg-2e6b7563-svm-aac5.f.aivencloud.com');
-  console.error('  - Port:', 14244);
-  console.error('  - Database:', 'defaultdb');
-  console.error('  - SSL enabled:', true);
-  console.error('  - Connection timeout:', '10 seconds');
-  throw error;
+async function initializeDatabase() {
+  try {
+    await AppDataSource.initialize();
+    console.log('✅ Database connection established successfully');
+  } catch (error) {
+    console.error('❌ Database connection failed:', error.message);
+    console.error('❌ Connection details:');
+    console.error('  - Host:', 'pg-2e6b7563-svm-aac5.f.aivencloud.com');
+    console.error('  - Port:', 14244);
+    console.error('  - Database:', 'defaultdb');
+    console.error('  - SSL enabled:', true);
+    console.error('  - Connection timeout:', '10 seconds');
+    throw error;
+  }
 }
+initializeDatabase();
 // Add preflight request logging middleware
 app.use((req, res, next) => {
   if (req.method === 'OPTIONS') {

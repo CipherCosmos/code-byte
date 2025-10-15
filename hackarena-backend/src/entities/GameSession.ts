@@ -1,6 +1,6 @@
 import { Entity, PrimaryColumn, Column, ManyToOne, JoinColumn } from 'typeorm';
-import { Game } from './Game';
-import { Question } from './Question';
+import { Game } from './Game.js';
+import { Question } from './Question.js';
 
 @Entity('game_sessions')
 export class GameSession {

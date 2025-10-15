@@ -1,5 +1,5 @@
 import { Entity, PrimaryColumn, Column, CreateDateColumn, ManyToOne, JoinColumn } from 'typeorm';
-import { Answer } from './Answer';
+import { Answer } from './Answer.js';
 
 @Entity('code_execution_results')
 export class CodeExecutionResult {
