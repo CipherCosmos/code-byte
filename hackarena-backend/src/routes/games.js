@@ -2181,16 +2181,14 @@ router.get('/:gameCode/leaderboard', async (req, res) => {
       return res.status(404).json({ error: 'Game not found' });
     }
 
-    let qrCodeUrl = game.qr_code_url;
-    if (!qrCodeUrl) {
-      // Generate QR code if it doesn't exist
-      qrCodeUrl = await generateAndUploadQRCode(req.params.gameCode);
-      // Update game with QR code URL
-      await db.runAsync(
-        'UPDATE games SET qr_code_url = $1 WHERE id = $2',
-        [qrCodeUrl, game.id]
-      );
-    }
+    // Always generate fresh QR code for public leaderboard to ensure correct URL
+    const qrCodeUrl = await generateAndUploadQRCode(req.params.gameCode);
+
+    // Update game with latest QR code URL
+    await db.runAsync(
+      'UPDATE games SET qr_code_url = $1 WHERE id = $2',
+      [qrCodeUrl, game.id]
+    );
 
     const leaderboard = await db.allAsync(
       `SELECT name, avatar, total_score, current_rank, status
