@@ -4,6 +4,9 @@ import MultipleChoiceComponent from './MultipleChoiceComponent';
 import CodeComponent from './CodeComponent';
 import TextInputComponent from './TextInputComponent';
 import CrosswordComponent from './CrosswordComponent';
+import ImageComponent from './ImageComponent';
+import FillBlankComponent from './FillBlankComponent';
+import ShortAnswerComponent from './ShortAnswerComponent';
 
 const QuestionTypeRouter = ({
   question,
@@ -15,7 +18,9 @@ const QuestionTypeRouter = ({
   showInstructions,
   setShowInstructions,
   codeHints,
-  setCodeHints
+  setCodeHints,
+  hintUsed,
+  setHintUsed
 }) => {
   if (!question) return null;
 
@@ -30,6 +35,8 @@ const QuestionTypeRouter = ({
           answer={answer}
           setAnswer={setAnswer}
           submitted={submitted}
+          hintUsed={hintUsed}
+          setHintUsed={setHintUsed}
         />
       );
 
@@ -41,17 +48,22 @@ const QuestionTypeRouter = ({
           answer={answer}
           setAnswer={setAnswer}
           submitted={submitted}
+          hintUsed={hintUsed}
+          setHintUsed={setHintUsed}
         />
       );
 
     case "multiple":
     case "multiple_choice":
+    case "multiple_answers":
       return (
         <MultipleChoiceComponent
           question={question}
           answer={answer}
           setAnswer={setAnswer}
           submitted={submitted}
+          hintUsed={hintUsed}
+          setHintUsed={setHintUsed}
         />
       );
 
@@ -68,18 +80,44 @@ const QuestionTypeRouter = ({
           setShowInstructions={setShowInstructions}
           codeHints={codeHints}
           setCodeHints={setCodeHints}
+          hintUsed={hintUsed}
+          setHintUsed={setHintUsed}
         />
       );
 
-    case "fill_blank":
-    case "short_answer":
     case "image":
       return (
-        <TextInputComponent
+        <ImageComponent
           question={question}
           answer={answer}
           setAnswer={setAnswer}
           submitted={submitted}
+          hintUsed={hintUsed}
+          setHintUsed={setHintUsed}
+        />
+      );
+
+    case "fill_blank":
+      return (
+        <FillBlankComponent
+          question={question}
+          answer={answer}
+          setAnswer={setAnswer}
+          submitted={submitted}
+          hintUsed={hintUsed}
+          setHintUsed={setHintUsed}
+        />
+      );
+
+    case "short_answer":
+      return (
+        <ShortAnswerComponent
+          question={question}
+          answer={answer}
+          setAnswer={setAnswer}
+          submitted={submitted}
+          hintUsed={hintUsed}
+          setHintUsed={setHintUsed}
         />
       );
 

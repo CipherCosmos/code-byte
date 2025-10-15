@@ -6,6 +6,9 @@ import MultipleChoiceComponent from '../components/MultipleChoiceComponent';
 import CodeComponent from '../components/CodeComponent';
 import TextInputComponent from '../components/TextInputComponent';
 import CrosswordComponent from '../components/CrosswordComponent';
+import ImageComponent from '../components/ImageComponent';
+import FillBlankComponent from '../components/FillBlankComponent';
+import ShortAnswerComponent from '../components/ShortAnswerComponent';
 
 // Mock all components
 jest.mock('../components/MCQComponent', () => jest.fn(() => <div data-testid="mcq-component">MCQ Component</div>));
@@ -14,6 +17,9 @@ jest.mock('../components/MultipleChoiceComponent', () => jest.fn(() => <div data
 jest.mock('../components/CodeComponent', () => jest.fn(() => <div data-testid="code-component">Code Component</div>));
 jest.mock('../components/TextInputComponent', () => jest.fn(() => <div data-testid="text-input-component">Text Input Component</div>));
 jest.mock('../components/CrosswordComponent', () => jest.fn(() => <div data-testid="crossword-component">Crossword Component</div>));
+jest.mock('../components/ImageComponent', () => jest.fn(() => <div data-testid="image-component">Image Component</div>));
+jest.mock('../components/FillBlankComponent', () => jest.fn(() => <div data-testid="fill-blank-component">Fill Blank Component</div>));
+jest.mock('../components/ShortAnswerComponent', () => jest.fn(() => <div data-testid="short-answer-component">Short Answer Component</div>));
 
 describe('QuestionTypeRouter Component', () => {
   const mockProps = {
@@ -133,6 +139,22 @@ describe('QuestionTypeRouter Component', () => {
     );
   });
 
+  it('renders MultipleChoiceComponent for multiple_answers question type', () => {
+    const question = { question_type: 'multiple_answers' };
+    render(<QuestionTypeRouter {...mockProps} question={question} />);
+
+    expect(screen.getByTestId('multiple-choice-component')).toBeInTheDocument();
+    expect(MultipleChoiceComponent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        question,
+        answer: mockProps.answer,
+        setAnswer: mockProps.setAnswer,
+        submitted: mockProps.submitted
+      }),
+      expect.any(Object)
+    );
+  });
+
   it('renders CodeComponent for code question type', () => {
     const question = { question_type: 'code' };
     render(<QuestionTypeRouter {...mockProps} question={question} />);
@@ -155,12 +177,12 @@ describe('QuestionTypeRouter Component', () => {
     );
   });
 
-  it('renders TextInputComponent for fill_blank question type', () => {
+  it('renders FillBlankComponent for fill_blank question type', () => {
     const question = { question_type: 'fill_blank' };
     render(<QuestionTypeRouter {...mockProps} question={question} />);
 
-    expect(screen.getByTestId('text-input-component')).toBeInTheDocument();
-    expect(TextInputComponent).toHaveBeenCalledWith(
+    expect(screen.getByTestId('fill-blank-component')).toBeInTheDocument();
+    expect(FillBlankComponent).toHaveBeenCalledWith(
       expect.objectContaining({
         question,
         answer: mockProps.answer,
@@ -171,12 +193,12 @@ describe('QuestionTypeRouter Component', () => {
     );
   });
 
-  it('renders TextInputComponent for short_answer question type', () => {
+  it('renders ShortAnswerComponent for short_answer question type', () => {
     const question = { question_type: 'short_answer' };
     render(<QuestionTypeRouter {...mockProps} question={question} />);
 
-    expect(screen.getByTestId('text-input-component')).toBeInTheDocument();
-    expect(TextInputComponent).toHaveBeenCalledWith(
+    expect(screen.getByTestId('short-answer-component')).toBeInTheDocument();
+    expect(ShortAnswerComponent).toHaveBeenCalledWith(
       expect.objectContaining({
         question,
         answer: mockProps.answer,
@@ -187,12 +209,12 @@ describe('QuestionTypeRouter Component', () => {
     );
   });
 
-  it('renders TextInputComponent for image question type', () => {
+  it('renders ImageComponent for image question type', () => {
     const question = { question_type: 'image' };
     render(<QuestionTypeRouter {...mockProps} question={question} />);
 
-    expect(screen.getByTestId('text-input-component')).toBeInTheDocument();
-    expect(TextInputComponent).toHaveBeenCalledWith(
+    expect(screen.getByTestId('image-component')).toBeInTheDocument();
+    expect(ImageComponent).toHaveBeenCalledWith(
       expect.objectContaining({
         question,
         answer: mockProps.answer,

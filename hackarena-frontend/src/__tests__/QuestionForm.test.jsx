@@ -73,11 +73,11 @@ describe('QuestionForm Component', () => {
     expect(screen.getByText('Answer Options')).toBeInTheDocument();
 
     // Fill required fields
-    const questionInput = screen.getByText('Question Text *');
+    const questionInput = screen.getByPlaceholderText('Enter your engaging question... (e.g., \'What is the output of the following code?\')');
     const correctAnswerInput = screen.getByText('Correct Answer *');
 
     await user.type(questionInput, 'Test question');
-    await user.type(correctAnswerInput, 'A');
+    await user.selectOptions(correctAnswerInput, 'Option A');
 
     // Add an option
     const optionInputs = screen.getAllByPlaceholderText(/Enter option [A-D]/);
@@ -122,8 +122,8 @@ describe('QuestionForm Component', () => {
     await user.click(basicTab);
 
     // Fill required fields
-    const questionInput = screen.getByText('Question Text *');
-    const correctAnswerTextarea = screen.getByPlaceholderText(/Enter the expected complete solution/);
+    const questionInput = screen.getByPlaceholderText('Enter your engaging question... (e.g., \'What is the output of the following code?\')');
+    const correctAnswerTextarea = screen.getByPlaceholderText('Enter the expected complete solution...');
 
     await user.type(questionInput, 'Write a function to reverse a string');
     await user.type(correctAnswerTextarea, 'function reverse(str) { return str.split("").reverse().join(""); }');
@@ -165,10 +165,11 @@ describe('QuestionForm Component', () => {
     await user.click(basicTab);
 
     // Fill required fields and test cases
-    const questionInput = screen.getByText('Question Text *');
-    const testCasesTextarea = screen.getByPlaceholderText(/\[[\s\S]*\]/);
+    const questionInput = screen.getByPlaceholderText('Enter your engaging question... (e.g., \'What is the output of the following code?\')');
+    const testCasesTextarea = screen.getByPlaceholderText('[\n  {\n    "input": "2 3",\n    "expectedOutput": "5",\n    "description": "Add two numbers"\n  },\n  {\n    "input": "10 20",\n    "expectedOutput": "30",\n    "description": "Add larger numbers"\n  }\n]');
 
     await user.type(questionInput, 'Write a function to add two numbers');
+    await user.clear(testCasesTextarea);
     await user.type(testCasesTextarea, '[{"input": "2 3", "expectedOutput": "5", "description": "Add two numbers"}, {"input": "10 20", "expectedOutput": "30", "description": "Add larger numbers"}]');
 
     const submitButton = screen.getByRole('button', { name: /Create Question/i });
@@ -206,7 +207,7 @@ describe('QuestionForm Component', () => {
     await user.click(basicTab);
 
     // Fill required fields
-    const questionInput = screen.getByText('Question Text *');
+    const questionInput = screen.getByPlaceholderText('Enter your engaging question... (e.g., \'What is the output of the following code?\')');
 
     await user.type(questionInput, 'Solve this crossword');
 
@@ -248,7 +249,7 @@ describe('QuestionForm Component', () => {
     await user.upload(fileInput, file);
 
     await waitFor(() => {
-      expect(fetch).toHaveBeenCalledWith('/api/games/upload-image', expect.any(Object));
+      expect(fetch).toHaveBeenCalledWith('http://localhost:10000/api/games/upload-image', expect.any(Object));
     });
   });
 
@@ -273,7 +274,7 @@ describe('QuestionForm Component', () => {
     expect(optionInputs).toHaveLength(5);
 
     // Remove an option
-    const removeButtons = screen.getAllByRole('button', { name: /Remove option/ }); // Minus buttons
+    const removeButtons = screen.getAllByRole('button', { name: /Remove option [A-E]/ }); // Minus buttons
     await user.click(removeButtons[0]);
 
     // Should now have 4 options again

@@ -1,6 +1,6 @@
+import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import toast from 'react-hot-toast';
-import { useState, useEffect } from 'react'
-import { X, Plus, Minus, FileText, Settings, Code, HelpCircle, AlertCircle, CheckCircle, Eye, EyeOff, Loader, Sparkles, BookOpen, Target, Clock, Zap } from 'lucide-react'
+import { X, Plus, Minus, FileText, Settings, Code, HelpCircle, AlertCircle, CheckCircle, Eye, EyeOff, Loader, Sparkles, BookOpen, Target, Clock, Zap, GripVertical } from 'lucide-react'
 import Editor from 'react-simple-code-editor'
 import Prism from 'prismjs'
 import 'prismjs/components/prism-clike'
@@ -8,12 +8,121 @@ import 'prismjs/components/prism-javascript'
 import 'prismjs/components/prism-python'
 import 'prismjs/components/prism-java'
 import 'prismjs/themes/prism.css'
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from '@dnd-kit/core'
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable'
+import {
+  useSortable,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
+
+// Memoize the SortableOption component to prevent unnecessary re-renders
+const SortableOption = React.memo(({ option, index, onUpdate, onRemove, questionType, evaluationMode, codeLanguage, getLanguageHighlight }) => {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: `option-${index}` })
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  }
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`group flex items-start space-x-4 p-4 border-2 border-gray-100 rounded-xl hover:border-blue-200 hover:bg-blue-50/30 transition-all duration-200 ${
+        isDragging ? 'shadow-lg bg-white' : ''
+      }`}
+    >
+      <div className="flex items-center space-x-3">
+        <button
+          {...attributes}
+          {...listeners}
+          className="cursor-grab active:cursor-grabbing p-1 hover:bg-gray-200 rounded transition-colors"
+          aria-label={`Drag option ${String.fromCharCode(65 + index)}`}
+        >
+          <GripVertical className="h-4 w-4 text-gray-400" />
+        </button>
+        <span className="text-base font-bold text-blue-600 w-8 mt-1 bg-blue-100 rounded-full flex items-center justify-center h-8">
+          {String.fromCharCode(65 + index)}
+        </span>
+      </div>
+      <div className="flex-1">
+        {questionType === 'code' && evaluationMode === 'mcq' ? (
+          <Editor
+            value={option}
+            onValueChange={(code) => onUpdate(index, code)}
+            highlight={(code) => Prism.highlight(code, getLanguageHighlight(codeLanguage))}
+            padding={15}
+            style={{
+              fontFamily: '"Inconsolata", "Monaco", monospace',
+              fontSize: 13,
+              border: '2px solid transparent',
+              borderRadius: '0.5rem',
+              minHeight: '80px',
+              width: '100%',
+              backgroundColor: '#fafafa',
+              boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.1)'
+            }}
+            placeholder={`Enter code option ${String.fromCharCode(65 + index)}`}
+            aria-label={`Code editor for option ${String.fromCharCode(65 + index)}`}
+          />
+        ) : (
+          <input
+            type="text"
+            value={option}
+            onChange={(e) => onUpdate(index, e.target.value)}
+            className="input flex-1 py-3 px-4 rounded-lg border-gray-200 focus:border-blue-400 focus:ring-2 focus:ring-blue-500/20 transition-all duration-200"
+            placeholder={`Enter option ${String.fromCharCode(65 + index)}`}
+            aria-label={`Text input for option ${String.fromCharCode(65 + index)}`}
+          />
+        )}
+      </div>
+      {onRemove && (
+        <button
+          type="button"
+          onClick={() => onRemove(index)}
+          className="text-red-500 hover:text-red-700 hover:bg-red-50 p-2 mt-1 rounded-lg transition-all duration-200 opacity-0 group-hover:opacity-100"
+          aria-label={`Remove option ${String.fromCharCode(65 + index)}`}
+        >
+          <Minus className="h-4 w-4" />
+        </button>
+      )}
+    </div>
+  )
+})
 
 const QuestionForm = ({ question = null, onSave, onCancel }) => {
-   const [activeTab, setActiveTab] = useState('basic')
-   const [isSubmitting, setIsSubmitting] = useState(false)
-   const [validationErrors, setValidationErrors] = useState({})
-   const [showPreview, setShowPreview] = useState(false)
+    const [activeTab, setActiveTab] = useState('basic')
+    const [isSubmitting, setIsSubmitting] = useState(false)
+    const [validationErrors, setValidationErrors] = useState({})
+    const [showPreview, setShowPreview] = useState(false)
+    const [realTimePreview, setRealTimePreview] = useState(true)
+
+    const sensors = useSensors(
+      useSensor(PointerSensor),
+      useSensor(KeyboardSensor, {
+        coordinateGetter: sortableKeyboardCoordinates,
+      })
+    )
    const [formData, setFormData] = useState({
       questionText: '',
       questionType: 'mcq',
@@ -83,99 +192,99 @@ const QuestionForm = ({ question = null, onSave, onCancel }) => {
     }
   }, [question])
 
-  const validateForm = () => {
+  const validateForm = useCallback(() => {
     const errors = {}
 
-    // Basic validation
+    // Basic validation with enhanced messages
     if (!formData.questionText.trim()) {
-      errors.questionText = 'Question text is required'
+      errors.questionText = 'Question text is required. Please enter a clear, engaging question.'
     }
 
     if (formData.questionType === 'mcq' && formData.options.filter(opt => opt.trim()).length < 2) {
-      errors.options = 'At least 2 options are required for MCQ'
+      errors.options = 'At least 2 options are required for MCQ. Add more answer choices to make the question challenging.'
     }
 
     if (formData.questionType === 'fill_blank' && !formData.correctAnswer.trim()) {
-      errors.correctAnswer = 'Correct answer is required for Fill in the Blank'
+      errors.correctAnswer = 'Correct answer is required for Fill in the Blank. Specify the expected word or phrase.'
     }
 
     if (formData.questionType === 'multiple_answers') {
       if (formData.options.filter(opt => opt.trim()).length < 2) {
-        errors.options = 'At least 2 options are required for Multiple Answers'
+        errors.options = 'At least 2 options are required for Multiple Answers. Provide multiple choices for participants.'
       }
       if (!Array.isArray(formData.correctAnswer) || formData.correctAnswer.length === 0) {
-        errors.correctAnswer = 'At least one correct answer must be selected for Multiple Answers'
+        errors.correctAnswer = 'At least one correct answer must be selected for Multiple Answers. Check the boxes for correct options.'
       }
     }
 
     if (formData.questionType === 'code') {
       if (formData.evaluationMode === 'mcq') {
         if (!formData.codeSnippet.trim()) {
-          errors.codeSnippet = 'Code snippet is required for Code Snippet MCQ'
+          errors.codeSnippet = 'Code snippet is required for Code Snippet MCQ. Provide the code that participants will analyze.'
         }
         if (formData.options.filter(opt => opt.trim()).length < 2) {
-          errors.codeOptions = 'At least 2 code options are required'
+          errors.codeOptions = 'At least 2 code options are required. Create different code choices for participants to select from.'
         }
         if (!formData.correctAnswer.trim()) {
-          errors.correctAnswer = 'Correct answer must be selected'
+          errors.correctAnswer = 'Correct answer must be selected. Choose which code option is the right answer.'
         }
       } else if (formData.evaluationMode === 'bugfix') {
         if (!formData.bugFixCode.trim()) {
-          errors.bugFixCode = 'Buggy code is required for Bug Fix Mode'
+          errors.bugFixCode = 'Buggy code is required for Bug Fix Mode. Provide the code with intentional errors.'
         }
         if (!formData.correctAnswer.trim()) {
-          errors.correctAnswer = 'Expected fixed code is required'
+          errors.correctAnswer = 'Expected fixed code is required. Show the corrected version of the code.'
         }
       } else if (formData.evaluationMode === 'ide') {
         if (!formData.correctAnswer.trim()) {
-          errors.correctAnswer = 'Expected solution code is required for IDE Mode'
+          errors.correctAnswer = 'Expected solution code is required for IDE Mode. Provide the complete working solution.'
         }
       } else if (formData.evaluationMode === 'compiler') {
         if (!formData.testCases.trim()) {
-          errors.testCases = 'Test cases are required for compiler evaluation'
+          errors.testCases = 'Test cases are required for compiler evaluation. Define input/output pairs to validate solutions.'
         } else {
           try {
             const testCases = JSON.parse(formData.testCases)
             if (!Array.isArray(testCases) || testCases.length === 0) {
-              errors.testCases = 'Test cases must be a non-empty array'
+              errors.testCases = 'Test cases must be a non-empty array. Add at least one test case to evaluate code.'
             } else {
               for (let i = 0; i < testCases.length; i++) {
                 const testCase = testCases[i]
                 if (!testCase.input || !testCase.expectedOutput) {
-                  errors.testCases = `Test case ${i + 1} must have input and expectedOutput fields`
+                  errors.testCases = `Test case ${i + 1} must have both 'input' and 'expectedOutput' fields. Each test case needs sample input and expected result.`
                   break
                 }
               }
             }
           } catch (error) {
-            errors.testCases = 'Test cases must be valid JSON'
+            errors.testCases = 'Test cases must be valid JSON. Check your JSON syntax and ensure it\'s properly formatted.'
           }
         }
       }
     }
 
     if (formData.questionType === 'image' && !formData.imageUrl) {
-      errors.imageUrl = 'Please upload an image for image-based questions'
+      errors.imageUrl = 'Please upload an image for image-based questions. Select an image file to include with your question.'
     }
 
     if (formData.questionType === 'crossword') {
       if (!formData.crosswordGrid || formData.crosswordGrid.length === 0) {
-        errors.crosswordGrid = 'Crossword grid is required'
+        errors.crosswordGrid = 'Crossword grid is required. Define the crossword puzzle layout.'
       }
       if (!formData.crosswordClues || Object.keys(formData.crosswordClues).length === 0) {
-        errors.crosswordClues = 'Crossword clues are required'
+        errors.crosswordClues = 'Crossword clues are required. Provide hints for each crossword entry.'
       }
     }
 
     // Check for other question types that require correct answer
     if (['mcq', 'true_false', 'fill_blank'].includes(formData.questionType) && !formData.correctAnswer.trim()) {
-      errors.correctAnswer = 'Correct answer is required'
+      errors.correctAnswer = 'Correct answer is required. Please specify the right answer for this question type.'
     }
 
     return errors
-  }
+  }, [formData])
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = useCallback(async (e) => {
     e.preventDefault()
     setIsSubmitting(true)
 
@@ -183,47 +292,78 @@ const QuestionForm = ({ question = null, onSave, onCancel }) => {
     setValidationErrors(errors)
 
     if (Object.keys(errors).length > 0) {
-      // Find the first tab with errors
+      // Find the first tab with errors and switch to it
       const errorFields = Object.keys(errors)
       if (errorFields.includes('questionText') || errorFields.includes('questionType') || errorFields.includes('difficulty')) {
         setActiveTab('basic')
       } else {
         setActiveTab('content')
       }
+
+      // Scroll to the first error field for better UX
+      setTimeout(() => {
+        const firstErrorField = Object.keys(errors)[0]
+        const errorElement = document.querySelector(`[data-error="${firstErrorField}"]`) ||
+                           document.querySelector(`#${firstErrorField}-error`) ||
+                           document.querySelector(`[aria-describedby*="${firstErrorField}"]`)
+        if (errorElement) {
+          errorElement.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        }
+      }, 100)
+
       setIsSubmitting(false)
       return
     }
 
     try {
       await onSave(formData)
+      toast.success(question ? 'Question updated successfully!' : 'Question created successfully!')
     } catch (error) {
       console.error('Error saving question:', error)
-      setValidationErrors({ submit: 'Failed to save question. Please try again.' })
+      setValidationErrors({ submit: 'Failed to save question. Please check your connection and try again.' })
+      toast.error('Failed to save question. Please try again.')
     } finally {
       setIsSubmitting(false)
     }
-  }
+  }, [formData, onSave, validateForm])
 
-  const addOption = () => {
+  const addOption = useCallback(() => {
     setFormData(prev => ({
       ...prev,
       options: [...prev.options, '']
     }))
-  }
+  }, [])
 
-  const removeOption = (index) => {
+  const removeOption = useCallback((index) => {
     setFormData(prev => ({
       ...prev,
       options: prev.options.filter((_, i) => i !== index)
     }))
-  }
+  }, [])
 
-  const updateOption = (index, value) => {
+  const updateOption = useCallback((index, value) => {
     setFormData(prev => ({
       ...prev,
       options: prev.options.map((opt, i) => i === index ? value : opt)
     }))
-  }
+  }, [])
+
+  const handleDragEnd = useCallback((event) => {
+    const { active, over } = event
+
+    if (active.id !== over.id) {
+      setFormData((prev) => {
+        const oldIndex = prev.options.findIndex((_, index) => `option-${index}` === active.id)
+        const newIndex = prev.options.findIndex((_, index) => `option-${index}` === over.id)
+
+        return {
+          ...prev,
+          options: arrayMove(prev.options, oldIndex, newIndex),
+        }
+      })
+    }
+  }, [])
+
 
   const validateLanguage = (lang) => {
     const validLanguages = ['javascript', 'python', 'java']
@@ -347,6 +487,7 @@ const QuestionForm = ({ question = null, onSave, onCancel }) => {
                   required
                   aria-describedby={validationErrors.questionText ? "questionText-error" : undefined}
                   aria-label="Question text input"
+                  data-error="questionText"
                 />
                 {validationErrors.questionText && (
                   <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg animate-fade-in">
@@ -420,34 +561,42 @@ const QuestionForm = ({ question = null, onSave, onCancel }) => {
                       <Eye className="h-5 w-5 text-blue-600" />
                     </div>
                     <div>
-                      <p className="font-semibold text-blue-900 text-lg">Live Preview Mode</p>
-                      <p className="text-sm text-blue-700">See exactly how participants will experience this question</p>
+                      <p className="font-semibold text-blue-900 text-lg">Real-time Preview</p>
+                      <p className="text-sm text-blue-700">See live updates as you build your question</p>
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => setShowPreview(!showPreview)}
-                    className={`relative inline-flex h-8 w-14 items-center rounded-full transition-all duration-300 shadow-md ${
-                      showPreview ? 'bg-gradient-to-r from-blue-600 to-indigo-600' : 'bg-gray-300'
-                    }`}
-                    aria-label={showPreview ? "Hide preview" : "Show preview"}
-                    aria-pressed={showPreview}
-                  >
-                    <span
-                      className={`inline-block h-6 w-6 transform rounded-full bg-white shadow-lg transition-all duration-300 ${
-                        showPreview ? 'translate-x-7' : 'translate-x-1'
+                  <div className="flex items-center space-x-3">
+                    <span className={`text-xs px-2 py-1 rounded-full ${
+                      realTimePreview ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'
+                    }`}>
+                      {realTimePreview ? 'Auto' : 'Manual'}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setRealTimePreview(!realTimePreview)}
+                      className={`relative inline-flex h-8 w-14 items-center rounded-full transition-all duration-300 shadow-md ${
+                        realTimePreview ? 'bg-gradient-to-r from-green-500 to-emerald-500' : 'bg-gray-300'
                       }`}
-                    />
-                  </button>
-                </div>
-                {showPreview && (
-                  <div className="mt-4 p-4 bg-white/80 rounded-lg border border-blue-200/30">
-                    <p className="text-sm text-blue-800 flex items-center">
-                      <CheckCircle className="h-4 w-4 mr-2" />
-                      Preview is active - scroll down to see how your question will appear
-                    </p>
+                      aria-label={realTimePreview ? "Switch to manual preview" : "Switch to auto preview"}
+                      aria-pressed={realTimePreview}
+                    >
+                      <span
+                        className={`inline-block h-6 w-6 transform rounded-full bg-white shadow-lg transition-all duration-300 ${
+                          realTimePreview ? 'translate-x-7' : 'translate-x-1'
+                        }`}
+                      />
+                    </button>
                   </div>
-                )}
+                </div>
+                <div className="mt-4 p-4 bg-white/80 rounded-lg border border-blue-200/30">
+                  <p className="text-sm text-blue-800 flex items-center">
+                    <CheckCircle className="h-4 w-4 mr-2" />
+                    {realTimePreview
+                      ? 'Real-time preview active - changes appear instantly below'
+                      : 'Manual preview - toggle below to see changes'
+                    }
+                  </p>
+                </div>
               </div>
             </div>
           )}
@@ -576,45 +725,32 @@ const QuestionForm = ({ question = null, onSave, onCancel }) => {
                           </div>
                         )}
 
-                        <div className="space-y-4">
-                          {formData.options.map((option, index) => (
-                            <div key={index} className="group flex items-start space-x-4 p-4 border-2 border-gray-100 rounded-xl hover:border-blue-200 hover:bg-blue-50/30 transition-all duration-200">
-                              <span className="text-base font-bold text-blue-600 w-8 mt-3 bg-blue-100 rounded-full flex items-center justify-center h-8">
-                                {String.fromCharCode(65 + index)}
-                              </span>
-                              <div className="flex-1">
-                                <Editor
-                                  value={option}
-                                  onValueChange={(code) => updateOption(index, code)}
-                                  highlight={(code) => Prism.highlight(code, getLanguageHighlight(formData.codeLanguage))}
-                                  padding={15}
-                                  style={{
-                                    fontFamily: '"Inconsolata", "Monaco", monospace',
-                                    fontSize: 13,
-                                    border: '2px solid transparent',
-                                    borderRadius: '0.5rem',
-                                    minHeight: '80px',
-                                    width: '100%',
-                                    backgroundColor: '#fafafa',
-                                    boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.1)'
-                                  }}
-                                  placeholder={`Enter code option ${String.fromCharCode(65 + index)}`}
-                                  aria-label={`Code editor for option ${String.fromCharCode(65 + index)}`}
+                        <DndContext
+                          sensors={sensors}
+                          collisionDetection={closestCenter}
+                          onDragEnd={handleDragEnd}
+                        >
+                          <SortableContext
+                            items={formData.options.map((_, index) => `option-${index}`)}
+                            strategy={verticalListSortingStrategy}
+                          >
+                            <div className="space-y-4">
+                              {formData.options.map((option, index) => (
+                                <SortableOption
+                                  key={index}
+                                  option={option}
+                                  index={index}
+                                  onUpdate={updateOption}
+                                  onRemove={formData.options.length > 2 ? removeOption : null}
+                                  questionType={formData.questionType}
+                                  evaluationMode={formData.evaluationMode}
+                                  codeLanguage={formData.codeLanguage}
+                                  getLanguageHighlight={getLanguageHighlight}
                                 />
-                              </div>
-                              {formData.options.length > 2 && (
-                                <button
-                                  type="button"
-                                  onClick={() => removeOption(index)}
-                                  className="text-red-500 hover:text-red-700 hover:bg-red-50 p-2 mt-3 rounded-lg transition-all duration-200 opacity-0 group-hover:opacity-100"
-                                  aria-label={`Remove option ${String.fromCharCode(65 + index)}`}
-                                >
-                                  <Minus className="h-4 w-4" />
-                                </button>
-                              )}
+                              ))}
                             </div>
-                          ))}
-                        </div>
+                          </SortableContext>
+                        </DndContext>
                       </div>
 
                       {/* Correct Answer Section */}
@@ -911,33 +1047,32 @@ const QuestionForm = ({ question = null, onSave, onCancel }) => {
                       </div>
                     </div>
 
-                    <div className="space-y-4">
-                      {formData.options.map((option, index) => (
-                        <div key={index} className="group flex items-center space-x-4 p-4 border-2 border-gray-100 rounded-xl hover:border-blue-200 hover:bg-blue-50/30 transition-all duration-200">
-                          <span className="text-base font-bold text-blue-600 w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
-                            {String.fromCharCode(65 + index)}
-                          </span>
-                          <input
-                            type="text"
-                            value={option}
-                            onChange={(e) => updateOption(index, e.target.value)}
-                            className="input flex-1 py-3 px-4 rounded-lg border-gray-200 focus:border-blue-400 focus:ring-2 focus:ring-blue-500/20 transition-all duration-200"
-                            placeholder={`Enter option ${String.fromCharCode(65 + index)}`}
-                            aria-label={`Text input for option ${String.fromCharCode(65 + index)}`}
-                          />
-                          {formData.options.length > 2 && (
-                            <button
-                              type="button"
-                              onClick={() => removeOption(index)}
-                              className="text-red-500 hover:text-red-700 hover:bg-red-50 p-2 rounded-lg transition-all duration-200 opacity-0 group-hover:opacity-100"
-                              aria-label={`Remove option ${String.fromCharCode(65 + index)}`}
-                            >
-                              <Minus className="h-4 w-4" />
-                            </button>
-                          )}
+                    <DndContext
+                      sensors={sensors}
+                      collisionDetection={closestCenter}
+                      onDragEnd={handleDragEnd}
+                    >
+                      <SortableContext
+                        items={formData.options.map((_, index) => `option-${index}`)}
+                        strategy={verticalListSortingStrategy}
+                      >
+                        <div className="space-y-4">
+                          {formData.options.map((option, index) => (
+                            <SortableOption
+                              key={index}
+                              option={option}
+                              index={index}
+                              onUpdate={updateOption}
+                              onRemove={formData.options.length > 2 ? removeOption : null}
+                              questionType={formData.questionType}
+                              evaluationMode={formData.evaluationMode}
+                              codeLanguage={formData.codeLanguage}
+                              getLanguageHighlight={getLanguageHighlight}
+                            />
+                          ))}
                         </div>
-                      ))}
-                    </div>
+                      </SortableContext>
+                    </DndContext>
                   </div>
 
                   {/* Correct Answer Selection */}
@@ -1392,15 +1527,20 @@ const QuestionForm = ({ question = null, onSave, onCancel }) => {
           )}
 
           {/* Enhanced Preview Section */}
-          {showPreview && (
+          {(showPreview || realTimePreview) && (
             <div className="border-t border-gray-200 pt-8">
-              <div className="bg-gradient-to-br from-slate-50 to-gray-50 rounded-2xl p-8 border border-gray-200/50 shadow-sm">
+              <div className="bg-gradient-to-br from-slate-50 to-gray-50 rounded-2xl p-8 border border-gray-200/50 shadow-sm animate-fade-in">
                 <h3 className="text-2xl font-bold text-gray-900 mb-6 flex items-center">
-                  <Eye className="h-6 w-6 mr-3 text-indigo-600" />
-                  Live Question Preview
+                  <Eye className="h-6 w-6 mr-3 text-indigo-600 animate-pulse" />
+                  {realTimePreview ? 'Live Question Preview' : 'Question Preview'}
                   <span className="ml-3 px-3 py-1 bg-indigo-100 text-indigo-700 text-sm font-medium rounded-full">
                     Participant View
                   </span>
+                  {realTimePreview && (
+                    <span className="ml-2 px-2 py-1 bg-green-100 text-green-700 text-xs font-medium rounded-full animate-bounce">
+                      Auto-updating
+                    </span>
+                  )}
                 </h3>
                 <div className="bg-white rounded-xl border-2 border-gray-200 p-6 shadow-lg">
                   {/* Question Header */}
@@ -1451,13 +1591,30 @@ const QuestionForm = ({ question = null, onSave, onCancel }) => {
                   {/* Options Preview */}
                   {formData.options.some(opt => opt.trim()) && (
                     <div className="space-y-3 mb-4">
-                      <p className="text-sm font-medium text-gray-700">Answer Options:</p>
+                      <p className="text-sm font-medium text-gray-700 flex items-center">
+                        <CheckCircle className="h-4 w-4 mr-2 text-green-600" />
+                        Answer Options ({formData.options.filter(opt => opt.trim()).length}):
+                      </p>
                       {formData.options.filter(opt => opt.trim()).map((option, index) => (
-                        <div key={index} className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
-                          <span className="text-sm font-bold text-gray-600 w-6">
-                            {String.fromCharCode(65 + index)}.
+                        <div key={index} className={`flex items-center space-x-3 p-3 rounded-lg transition-all duration-200 ${
+                          formData.correctAnswer === option ||
+                          (Array.isArray(formData.correctAnswer) && formData.correctAnswer.includes(option))
+                            ? 'bg-green-50 border-2 border-green-200'
+                            : 'bg-gray-50'
+                        }`}>
+                          <span className={`text-sm font-bold w-6 rounded-full flex items-center justify-center h-6 ${
+                            formData.correctAnswer === option ||
+                            (Array.isArray(formData.correctAnswer) && formData.correctAnswer.includes(option))
+                              ? 'bg-green-600 text-white'
+                              : 'bg-blue-100 text-blue-600'
+                          }`}>
+                            {String.fromCharCode(65 + index)}
                           </span>
-                          <span className="text-sm text-gray-800">{option.substring(0, 100)}{option.length > 100 ? '...' : ''}</span>
+                          <span className="text-sm text-gray-800 flex-1">{option.substring(0, 100)}{option.length > 100 ? '...' : ''}</span>
+                          {formData.correctAnswer === option ||
+                           (Array.isArray(formData.correctAnswer) && formData.correctAnswer.includes(option)) && (
+                            <CheckCircle className="h-4 w-4 text-green-600" />
+                          )}
                         </div>
                       ))}
                     </div>

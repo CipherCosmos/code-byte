@@ -210,6 +210,112 @@ router.get('/:gameId', authenticateToken, async (req, res) => {
     const questions = await db.allAsync(questionsQuery, questionsParams);
     console.log('🔍 Questions query result: Found', questions.length, 'questions');
 
+    // Parse additional fields for each question based on type
+    const parsedQuestions = questions.map(question => {
+      let parsedOptions = [];
+      let parsedCrosswordGrid = null;
+      let parsedCrosswordClues = null;
+      let parsedCrosswordSize = null;
+      let parsedTestCases = null;
+      let parsedCodeLanguages = null;
+
+      try {
+        if (question.options) {
+          if (Array.isArray(question.options)) {
+            // Already an array, use as-is
+            parsedOptions = [...question.options];
+          } else if (typeof question.options === 'string') {
+            const trimmedOptions = question.options.trim();
+
+            if (trimmedOptions.startsWith('[') && trimmedOptions.endsWith(']')) {
+              // JSON string array
+              try {
+                parsedOptions = JSON.parse(trimmedOptions);
+              } catch (parseError) {
+                // Fallback: try splitting by comma
+                parsedOptions = trimmedOptions.slice(1, -1).split(',').map(opt => opt.trim()).filter(opt => opt.length > 0);
+              }
+            } else if (trimmedOptions.includes(',')) {
+              // Comma-separated string
+              parsedOptions = trimmedOptions.split(',').map(opt => opt.trim()).filter(opt => opt.length > 0);
+            } else if (trimmedOptions.length > 0) {
+              // Single string value
+              parsedOptions = [trimmedOptions];
+            } else {
+              // Empty string
+              parsedOptions = [];
+            }
+          } else {
+            // Other types
+            parsedOptions = [];
+          }
+
+          // Ensure we always have an array
+          if (!Array.isArray(parsedOptions)) {
+            parsedOptions = [];
+          }
+
+          // Filter out empty strings and trim whitespace
+          parsedOptions = parsedOptions
+            .filter(opt => opt != null && String(opt).trim().length > 0)
+            .map(opt => String(opt).trim());
+        }
+      } catch (error) {
+        console.error('Error parsing options for question', question.id, ':', error);
+        parsedOptions = [];
+      }
+
+      try {
+        if (question.crossword_grid) {
+          parsedCrosswordGrid = JSON.parse(question.crossword_grid);
+        }
+      } catch (error) {
+        console.error('Error parsing crossword grid for question', question.id, ':', error);
+      }
+
+      try {
+        if (question.crossword_clues) {
+          parsedCrosswordClues = JSON.parse(question.crossword_clues);
+        }
+      } catch (error) {
+        console.error('Error parsing crossword clues for question', question.id, ':', error);
+      }
+
+      try {
+        if (question.crossword_size) {
+          parsedCrosswordSize = JSON.parse(question.crossword_size);
+        }
+      } catch (error) {
+        console.error('Error parsing crossword size for question', question.id, ':', error);
+      }
+
+      try {
+        if (question.test_cases) {
+          parsedTestCases = JSON.parse(question.test_cases);
+        }
+      } catch (error) {
+        console.error('Error parsing test cases for question', question.id, ':', error);
+      }
+
+      try {
+        if (question.code_languages) {
+          parsedCodeLanguages = JSON.parse(question.code_languages);
+        }
+      } catch (error) {
+        console.error('Error parsing code languages for question', question.id, ':', error);
+      }
+
+      return {
+        ...question,
+        options: parsedOptions,
+        crosswordGrid: parsedCrosswordGrid,
+        crosswordClues: parsedCrosswordClues,
+        crosswordSize: parsedCrosswordSize,
+        testCases: parsedTestCases,
+        codeLanguages: parsedCodeLanguages
+      };
+    });
+
     console.log('🔍 Fetching participants for game...');
     const participantsQuery = `SELECT id, name, avatar, total_score, current_rank, status, qualified, cheat_warnings, joined_at
        FROM participants WHERE game_id = $1 ORDER BY total_score DESC`;
@@ -245,7 +351,7 @@ router.get('/:gameId', authenticateToken, async (req, res) => {
     console.log('✅ GET /api/games/:gameId - Request completed successfully');
     res.json({
       ...game,
-      questions,
+      questions: parsedQuestions,
       participants,
       qrCode: qrCodeUrl,
       joinUrl
@@ -499,6 +605,83 @@ router.post('/:gameId/questions', authenticateToken, async (req, res) => {
       }
     }
 
+    // Validate image questions
+    if (questionType === 'image') {
+      if (!imageUrl || imageUrl.trim() === '') {
+        return res.status(400).json({ error: 'Image questions must have an image URL' });
+      }
+      // Validate image URL format
+      try {
+        const url = new URL(imageUrl);
+        if (!['http:', 'https:'].includes(url.protocol)) {
+          return res.status(400).json({ error: 'Image URL must be a valid HTTP/HTTPS URL' });
+        }
+      } catch (error) {
+        return res.status(400).json({ error: 'Invalid image URL format' });
+      }
+      // For image questions, correct answer should be descriptive text
+      if (!correctAnswer || correctAnswer.trim().length < 3) {
+        return res.status(400).json({ error: 'Image questions must have a descriptive correct answer (at least 3 characters)' });
+      }
+    }
+
+    // Validate crossword questions
+    if (questionType === 'crossword') {
+      if (!crosswordGrid || crosswordGrid.trim() === '') {
+        return res.status(400).json({ error: 'Crossword questions must have a grid definition' });
+      }
+      if (!crosswordClues || crosswordClues.trim() === '') {
+        return res.status(400).json({ error: 'Crossword questions must have clues' });
+      }
+      if (!crosswordSize || crosswordSize.trim() === '') {
+        return res.status(400).json({ error: 'Crossword questions must have size definition' });
+      }
+
+      // Validate crossword grid format (should be JSON)
+      try {
+        const grid = JSON.parse(crosswordGrid);
+        if (!Array.isArray(grid) || grid.length === 0) {
+          return res.status(400).json({ error: 'Crossword grid must be a non-empty array' });
+        }
+        // Validate grid structure
+        const firstRow = grid[0];
+        if (!Array.isArray(firstRow)) {
+          return res.status(400).json({ error: 'Crossword grid rows must be arrays' });
+        }
+        const expectedCols = firstRow.length;
+        for (let i = 1; i < grid.length; i++) {
+          if (!Array.isArray(grid[i]) || grid[i].length !== expectedCols) {
+            return res.status(400).json({ error: 'All crossword grid rows must have the same number of columns' });
+          }
+        }
+      } catch (error) {
+        return res.status(400).json({ error: 'Invalid crossword grid format - must be valid JSON' });
+      }
+
+      // Validate crossword clues format
+      try {
+        const clues = JSON.parse(crosswordClues);
+        if (typeof clues !== 'object' || clues === null) {
+          return res.status(400).json({ error: 'Crossword clues must be a valid object' });
+        }
+      } catch (error) {
+        return res.status(400).json({ error: 'Invalid crossword clues format - must be valid JSON' });
+      }
+
+      // Validate crossword size format
+      try {
+        const size = JSON.parse(crosswordSize);
+        if (typeof size !== 'object' || size === null || !size.rows || !size.cols) {
+          return res.status(400).json({ error: 'Crossword size must be an object with rows and cols properties' });
+        }
+        if (typeof size.rows !== 'number' || typeof size.cols !== 'number' || size.rows < 1 || size.cols < 1) {
+          return res.status(400).json({ error: 'Crossword size rows and cols must be positive numbers' });
+        }
+      } catch (error) {
+        return res.status(400).json({ error: 'Invalid crossword size format - must be valid JSON' });
+      }
+    }
+
     if (questionType === 'multiple_answers') {
       if (!Array.isArray(processedOptions) || processedOptions.length < 2) {
         console.error('Validation error: Multiple answers questions must have at least 2 options');
@@ -556,23 +739,86 @@ router.post('/:gameId/questions', authenticateToken, async (req, res) => {
       correctAnswer = JSON.stringify(processedCorrectAnswer);
     }
 
-    if (questionType === 'code_snippet' && !evaluationMode) {
-      console.error('Validation error: Code questions must specify evaluation mode');
-      return res.status(400).json({ error: 'Code questions must specify evaluation mode' });
-    }
+    if (questionType === 'code_snippet') {
+      if (!evaluationMode) {
+        console.error('Validation error: Code questions must specify evaluation mode');
+        return res.status(400).json({ error: 'Code questions must specify evaluation mode' });
+      }
 
-    // Validate test cases for code questions
-    if (questionType === 'code_snippet' && (evaluationMode === 'compiler' || evaluationMode === 'bugfix')) {
-      if (!testCases || testCases.trim() === '') {
-        console.error('Validation error: Test cases are required for compiler/bugfix evaluation');
-        return res.status(400).json({ error: 'Test cases are required for compiler/bugfix evaluation' });
+      // Validate supported evaluation modes
+      const validEvaluationModes = ['semantic', 'compiler', 'bugfix'];
+      if (!validEvaluationModes.includes(evaluationMode)) {
+        return res.status(400).json({ error: `Invalid evaluation mode. Must be one of: ${validEvaluationModes.join(', ')}` });
+      }
+
+      // Validate code languages for code questions
+      if (!code_languages || code_languages.trim() === '') {
+        return res.status(400).json({ error: 'Code questions must specify supported languages' });
       }
       try {
-        console.log('Parsing test cases:', testCases);
-        JSON.parse(testCases);
-      } catch (parseError) {
-        console.error('Validation error: Invalid test cases format', parseError);
-        return res.status(400).json({ error: 'Invalid test cases format' });
+        const languages = JSON.parse(code_languages);
+        if (!Array.isArray(languages) || languages.length === 0) {
+          return res.status(400).json({ error: 'Code languages must be a non-empty array' });
+        }
+        // Validate each language is supported
+        const supportedLanguages = ['javascript', 'python', 'java', 'cpp'];
+        for (const lang of languages) {
+          if (!supportedLanguages.includes(lang)) {
+            return res.status(400).json({ error: `Unsupported language: ${lang}. Supported: ${supportedLanguages.join(', ')}` });
+          }
+        }
+      } catch (error) {
+        return res.status(400).json({ error: 'Invalid code languages format - must be valid JSON array' });
+      }
+
+      // Validate code timeout
+      if (code_timeout != null) {
+        const timeout = Number(code_timeout);
+        if (isNaN(timeout) || timeout < 1 || timeout > 300) {
+          return res.status(400).json({ error: 'Code timeout must be between 1 and 300 seconds' });
+        }
+      }
+
+      // Validate code memory limit
+      if (code_memory_limit != null) {
+        const memoryLimit = Number(code_memory_limit);
+        if (isNaN(memoryLimit) || memoryLimit < 32 || memoryLimit > 1024) {
+          return res.status(400).json({ error: 'Code memory limit must be between 32MB and 1024MB' });
+        }
+      }
+
+      // Validate test cases for compiler/bugfix evaluation modes
+      if (evaluationMode === 'compiler' || evaluationMode === 'bugfix') {
+        if (!testCases || testCases.trim() === '') {
+          console.error('Validation error: Test cases are required for compiler/bugfix evaluation');
+          return res.status(400).json({ error: 'Test cases are required for compiler/bugfix evaluation' });
+        }
+        try {
+          console.log('Parsing test cases:', testCases);
+          const parsedTestCases = JSON.parse(testCases);
+          if (!Array.isArray(parsedTestCases) || parsedTestCases.length === 0) {
+            return res.status(400).json({ error: 'Test cases must be a non-empty array' });
+          }
+          // Validate test case structure
+          for (const testCase of parsedTestCases) {
+            if (!testCase.hasOwnProperty('input') || !testCase.hasOwnProperty('expectedOutput')) {
+              return res.status(400).json({ error: 'Each test case must have input and expectedOutput properties' });
+            }
+            if (typeof testCase.input !== 'string' || typeof testCase.expectedOutput !== 'string') {
+              return res.status(400).json({ error: 'Test case input and expectedOutput must be strings' });
+            }
+          }
+        } catch (parseError) {
+          console.error('Validation error: Invalid test cases format', parseError);
+          return res.status(400).json({ error: 'Invalid test cases format - must be valid JSON array' });
+        }
+      }
+
+      // For semantic evaluation, correct answer should be the expected code
+      if (evaluationMode === 'semantic') {
+        if (!correctAnswer || correctAnswer.trim().length < 10) {
+          return res.status(400).json({ error: 'Semantic evaluation requires a correct code answer (at least 10 characters)' });
+        }
       }
     }
 
@@ -673,8 +919,6 @@ router.post('/:gameId/questions', authenticateToken, async (req, res) => {
       newQuestionOrder,
       questionText,
       questionType,
-      questionType, // for type
-      questionText, // for content
       optionsJson,
       correctAnswer,
       hint,
@@ -692,13 +936,17 @@ router.post('/:gameId/questions', authenticateToken, async (req, res) => {
       JSON.stringify(crosswordSize) || null,
       null, // partial_marking_settings
       timeDecayEnabled || false, // time_decay_enabled
-      timeDecayFactor || 0.1 // time_decay_factor
+      timeDecayFactor || 0.1, // time_decay_factor
+      code_languages ? JSON.stringify(code_languages) : null,
+      code_timeout || 30,
+      code_memory_limit || 256,
+      code_template || null
     ];
     console.log('🔍 Backend - INSERT query params:', insertParams);
-    console.log('🔍 Backend - Options param (index 7):', insertParams[7]);
+    console.log('🔍 Backend - Options param (index 5):', insertParams[5]);
 
     const result = await db.runAsync(
-      `INSERT INTO questions (id, game_id, question_order, question_text, question_type, type, content, options, correct_answer, hint, hint_penalty, time_limit, marks, difficulty, explanation, evaluation_mode, test_cases, ai_validation_settings, image_url, crossword_grid, crossword_clues, crossword_size, partial_marking_settings, time_decay_enabled, time_decay_factor) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25)`,
+      `INSERT INTO questions (id, game_id, question_order, question_text, question_type, options, correct_answer, hint, hint_penalty, time_limit, marks, difficulty, explanation, evaluation_mode, test_cases, ai_validation_settings, image_url, crossword_grid, crossword_clues, crossword_size, partial_marking_settings, time_decay_enabled, time_decay_factor, code_languages, code_timeout, code_memory_limit, code_template) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27)`,
       insertParams
     );
 
@@ -734,9 +982,61 @@ router.post('/:gameId/questions', authenticateToken, async (req, res) => {
       parsedOptions = [];
     }
 
+    // Parse additional fields based on question type
+    let parsedCrosswordGrid = null;
+    let parsedCrosswordClues = null;
+    let parsedCrosswordSize = null;
+    let parsedTestCases = null;
+    let parsedCodeLanguages = null;
+
+    try {
+      if (question.crossword_grid) {
+        parsedCrosswordGrid = JSON.parse(question.crossword_grid);
+      }
+    } catch (error) {
+      console.error('Error parsing crossword grid:', error);
+    }
+
+    try {
+      if (question.crossword_clues) {
+        parsedCrosswordClues = JSON.parse(question.crossword_clues);
+      }
+    } catch (error) {
+      console.error('Error parsing crossword clues:', error);
+    }
+
+    try {
+      if (question.crossword_size) {
+        parsedCrosswordSize = JSON.parse(question.crossword_size);
+      }
+    } catch (error) {
+      console.error('Error parsing crossword size:', error);
+    }
+
+    try {
+      if (question.test_cases) {
+        parsedTestCases = JSON.parse(question.test_cases);
+      }
+    } catch (error) {
+      console.error('Error parsing test cases:', error);
+    }
+
+    try {
+      if (question.code_languages) {
+        parsedCodeLanguages = JSON.parse(question.code_languages);
+      }
+    } catch (error) {
+      console.error('Error parsing code languages:', error);
+    }
+
     res.status(201).json({
       ...question,
-      options: parsedOptions
+      options: parsedOptions,
+      crosswordGrid: parsedCrosswordGrid,
+      crosswordClues: parsedCrosswordClues,
+      crosswordSize: parsedCrosswordSize,
+      testCases: parsedTestCases,
+      codeLanguages: parsedCodeLanguages
     });
   } catch (error) {
     console.error('Add question error:', error);
@@ -1020,9 +1320,61 @@ router.put('/:gameId/questions/:questionId', authenticateToken, async (req, res)
       responseOptions = [];
     }
 
+    // Parse additional fields based on question type for update response
+    let parsedCrosswordGrid = null;
+    let parsedCrosswordClues = null;
+    let parsedCrosswordSize = null;
+    let parsedTestCases = null;
+    let parsedCodeLanguages = null;
+
+    try {
+      if (updatedQuestion.crossword_grid) {
+        parsedCrosswordGrid = JSON.parse(updatedQuestion.crossword_grid);
+      }
+    } catch (error) {
+      console.error('Error parsing crossword grid:', error);
+    }
+
+    try {
+      if (updatedQuestion.crossword_clues) {
+        parsedCrosswordClues = JSON.parse(updatedQuestion.crossword_clues);
+      }
+    } catch (error) {
+      console.error('Error parsing crossword clues:', error);
+    }
+
+    try {
+      if (updatedQuestion.crossword_size) {
+        parsedCrosswordSize = JSON.parse(updatedQuestion.crossword_size);
+      }
+    } catch (error) {
+      console.error('Error parsing crossword size:', error);
+    }
+
+    try {
+      if (updatedQuestion.test_cases) {
+        parsedTestCases = JSON.parse(updatedQuestion.test_cases);
+      }
+    } catch (error) {
+      console.error('Error parsing test cases:', error);
+    }
+
+    try {
+      if (updatedQuestion.code_languages) {
+        parsedCodeLanguages = JSON.parse(updatedQuestion.code_languages);
+      }
+    } catch (error) {
+      console.error('Error parsing code languages:', error);
+    }
+
     res.json({
       ...updatedQuestion,
-      options: responseOptions
+      options: responseOptions,
+      crosswordGrid: parsedCrosswordGrid,
+      crosswordClues: parsedCrosswordClues,
+      crosswordSize: parsedCrosswordSize,
+      testCases: parsedTestCases,
+      codeLanguages: parsedCodeLanguages
     });
   } catch (error) {
     console.error('Update question error:', error);
@@ -1236,23 +1588,110 @@ router.post('/:gameId/start', authenticateToken, async (req, res) => {
       // Emit to all participants
       console.log('📡 Emitting gameStarted event to room:', `game-${req.params.gameId}`);
       try {
-        // Safely parse options
+        // Safely parse options and additional fields
         let parsedOptions = [];
+        let parsedCrosswordGrid = null;
+        let parsedCrosswordClues = null;
+        let parsedCrosswordSize = null;
+        let parsedTestCases = null;
+        let parsedCodeLanguages = null;
+
         try {
-          parsedOptions = firstQuestion.options ? JSON.parse(firstQuestion.options) : [];
-          if (!Array.isArray(parsedOptions)) {
-            parsedOptions = [];
+          if (firstQuestion.options) {
+            if (Array.isArray(firstQuestion.options)) {
+              // Already an array, use as-is
+              parsedOptions = [...firstQuestion.options];
+            } else if (typeof firstQuestion.options === 'string') {
+              const trimmedOptions = firstQuestion.options.trim();
+
+              if (trimmedOptions.startsWith('[') && trimmedOptions.endsWith(']')) {
+                // JSON string array
+                try {
+                  parsedOptions = JSON.parse(trimmedOptions);
+                } catch (parseError) {
+                  // Fallback: try splitting by comma
+                  parsedOptions = trimmedOptions.slice(1, -1).split(',').map(opt => opt.trim()).filter(opt => opt.length > 0);
+                }
+              } else if (trimmedOptions.includes(',')) {
+                // Comma-separated string
+                parsedOptions = trimmedOptions.split(',').map(opt => opt.trim()).filter(opt => opt.length > 0);
+              } else if (trimmedOptions.length > 0) {
+                // Single string value
+                parsedOptions = [trimmedOptions];
+              } else {
+                // Empty string
+                parsedOptions = [];
+              }
+            } else {
+              // Other types
+              parsedOptions = [];
+            }
+
+            // Ensure we always have an array
+            if (!Array.isArray(parsedOptions)) {
+              parsedOptions = [];
+            }
+
+            // Filter out empty strings and trim whitespace
+            parsedOptions = parsedOptions
+              .filter(opt => opt != null && String(opt).trim().length > 0)
+              .map(opt => String(opt).trim());
           }
         } catch (parseError) {
           console.warn('⚠️ Failed to parse question options, using empty array:', parseError);
           parsedOptions = [];
         }
 
+        try {
+          if (firstQuestion.crossword_grid) {
+            parsedCrosswordGrid = JSON.parse(firstQuestion.crossword_grid);
+          }
+        } catch (error) {
+          console.warn('⚠️ Failed to parse crossword grid:', error);
+        }
+
+        try {
+          if (firstQuestion.crossword_clues) {
+            parsedCrosswordClues = JSON.parse(firstQuestion.crossword_clues);
+          }
+        } catch (error) {
+          console.warn('⚠️ Failed to parse crossword clues:', error);
+        }
+
+        try {
+          if (firstQuestion.crossword_size) {
+            parsedCrosswordSize = JSON.parse(firstQuestion.crossword_size);
+          }
+        } catch (error) {
+          console.warn('⚠️ Failed to parse crossword size:', error);
+        }
+
+        try {
+          if (firstQuestion.test_cases) {
+            parsedTestCases = JSON.parse(firstQuestion.test_cases);
+          }
+        } catch (error) {
+          console.warn('⚠️ Failed to parse test cases:', error);
+        }
+
+        try {
+          if (firstQuestion.code_languages) {
+            parsedCodeLanguages = JSON.parse(firstQuestion.code_languages);
+          }
+        } catch (error) {
+          console.warn('⚠️ Failed to parse code languages:', error);
+        }
+
         console.log('📡 Emitting gameStarted with options:', parsedOptions, 'length:', parsedOptions.length);
         io.to(`game-${req.params.gameId}`).emit('gameStarted', {
           question: {
             ...firstQuestion,
-            options: parsedOptions
+            options: parsedOptions,
+            crosswordGrid: parsedCrosswordGrid,
+            crosswordClues: parsedCrosswordClues,
+            crosswordSize: parsedCrosswordSize,
+            testCases: parsedTestCases,
+            codeLanguages: parsedCodeLanguages
           }
         });
         console.log('✅ Game started event emitted successfully - timer starts now for all participants');
@@ -1370,23 +1809,110 @@ router.post('/:gameId/next-question', authenticateToken, async (req, res) => {
     // Emit to all participants
     console.log('📡 NEXT QUESTION - Emitting nextQuestion event to room:', `game-${req.params.gameId}`);
     try {
-      // Safely parse options
+      // Safely parse options and additional fields
       let parsedOptions = [];
+      let parsedCrosswordGrid = null;
+      let parsedCrosswordClues = null;
+      let parsedCrosswordSize = null;
+      let parsedTestCases = null;
+      let parsedCodeLanguages = null;
+
       try {
-        parsedOptions = nextQuestion.options ? JSON.parse(nextQuestion.options) : [];
-        if (!Array.isArray(parsedOptions)) {
-          parsedOptions = [];
+        if (nextQuestion.options) {
+          if (Array.isArray(nextQuestion.options)) {
+            // Already an array, use as-is
+            parsedOptions = [...nextQuestion.options];
+          } else if (typeof nextQuestion.options === 'string') {
+            const trimmedOptions = nextQuestion.options.trim();
+
+            if (trimmedOptions.startsWith('[') && trimmedOptions.endsWith(']')) {
+              // JSON string array
+              try {
+                parsedOptions = JSON.parse(trimmedOptions);
+              } catch (parseError) {
+                // Fallback: try splitting by comma
+                parsedOptions = trimmedOptions.slice(1, -1).split(',').map(opt => opt.trim()).filter(opt => opt.length > 0);
+              }
+            } else if (trimmedOptions.includes(',')) {
+              // Comma-separated string
+              parsedOptions = trimmedOptions.split(',').map(opt => opt.trim()).filter(opt => opt.length > 0);
+            } else if (trimmedOptions.length > 0) {
+              // Single string value
+              parsedOptions = [trimmedOptions];
+            } else {
+              // Empty string
+              parsedOptions = [];
+            }
+          } else {
+            // Other types
+            parsedOptions = [];
+          }
+
+          // Ensure we always have an array
+          if (!Array.isArray(parsedOptions)) {
+            parsedOptions = [];
+          }
+
+          // Filter out empty strings and trim whitespace
+          parsedOptions = parsedOptions
+            .filter(opt => opt != null && String(opt).trim().length > 0)
+            .map(opt => String(opt).trim());
         }
       } catch (parseError) {
         console.warn('⚠️ Failed to parse question options, using empty array:', parseError);
         parsedOptions = [];
       }
 
+      try {
+        if (nextQuestion.crossword_grid) {
+          parsedCrosswordGrid = JSON.parse(nextQuestion.crossword_grid);
+        }
+      } catch (error) {
+        console.warn('⚠️ Failed to parse crossword grid:', error);
+      }
+
+      try {
+        if (nextQuestion.crossword_clues) {
+          parsedCrosswordClues = JSON.parse(nextQuestion.crossword_clues);
+        }
+      } catch (error) {
+        console.warn('⚠️ Failed to parse crossword clues:', error);
+      }
+
+      try {
+        if (nextQuestion.crossword_size) {
+          parsedCrosswordSize = JSON.parse(nextQuestion.crossword_size);
+        }
+      } catch (error) {
+        console.warn('⚠️ Failed to parse crossword size:', error);
+      }
+
+      try {
+        if (nextQuestion.test_cases) {
+          parsedTestCases = JSON.parse(nextQuestion.test_cases);
+        }
+      } catch (error) {
+        console.warn('⚠️ Failed to parse test cases:', error);
+      }
+
+      try {
+        if (nextQuestion.code_languages) {
+          parsedCodeLanguages = JSON.parse(nextQuestion.code_languages);
+        }
+      } catch (error) {
+        console.warn('⚠️ Failed to parse code languages:', error);
+      }
+
       console.log('📡 Emitting nextQuestion with options:', parsedOptions, 'length:', parsedOptions.length);
       io.to(`game-${req.params.gameId}`).emit('nextQuestion', {
         question: {
           ...nextQuestion,
-          options: parsedOptions
+          options: parsedOptions,
+          crosswordGrid: parsedCrosswordGrid,
+          crosswordClues: parsedCrosswordClues,
+          crosswordSize: parsedCrosswordSize,
+          testCases: parsedTestCases,
+          codeLanguages: parsedCodeLanguages
         }
       });
       console.log('✅ NEXT QUESTION - nextQuestion event emitted successfully - timer starts now for all participants');

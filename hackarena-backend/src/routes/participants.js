@@ -499,25 +499,25 @@ router.post('/answer', authenticateParticipant, async (req, res) => {
 
     if (question.question_type === 'mcq') {
       isCorrect = finalAnswer.toLowerCase().trim() === question.correct_answer.toLowerCase().trim();
-      correctnessScore = isCorrect ? 10 : 0;
+      correctnessScore = isCorrect ? 50 : 0; // Base score: 50 points
     } else if (question.question_type === 'fill_blank') {
       isCorrect = finalAnswer.toLowerCase().trim() === question.correct_answer.toLowerCase().trim();
-      correctnessScore = isCorrect ? 10 : 0;
+      correctnessScore = isCorrect ? 50 : 0; // Base score: 50 points
     } else if (question.question_type === 'image') {
       // For image-based questions, answer is typically a text description or identification
       isCorrect = finalAnswer.toLowerCase().trim() === question.correct_answer.toLowerCase().trim();
-      correctnessScore = isCorrect ? 10 : 0;
+      correctnessScore = isCorrect ? 50 : 0; // Base score: 50 points
     } else if (question.question_type === 'crossword') {
       // Validate crossword answers
       isCorrect = evaluateCrosswordAnswer(finalAnswer, question.crossword_grid, question.crossword_clues, question.crossword_size);
-      correctnessScore = isCorrect ? 10 : 0;
+      correctnessScore = isCorrect ? 50 : 0; // Base score: 50 points
     } else if (question.question_type === 'code') {
       // Enhanced code question evaluation with detailed scoring
       try {
         if (evaluationMode === 'mcq') {
           // Auto-check against key
           isCorrect = finalAnswer.toLowerCase().trim() === question.correct_answer.toLowerCase().trim();
-          correctnessScore = isCorrect ? 10 : 0;
+          correctnessScore = isCorrect ? 50 : 0; // Base score: 50 points
         } else if (evaluationMode === 'semantic') {
           // AI-based semantic validation with detailed analysis
           isCorrect = await evaluateCodeSemantic(finalAnswer, question.correct_answer, question.ai_validation_settings, language, participant.id);
@@ -526,11 +526,11 @@ router.post('/answer', authenticateParticipant, async (req, res) => {
           correctnessScore = (analysis.structureScore + analysis.keywordScore + analysis.similarityScore) / 3;
           codeQualityScore = analysis.complexityScore;
           performanceScore = 0; // Not applicable for semantic evaluation
-          isCorrect = correctnessScore >= 6; // Pass threshold
+          isCorrect = correctnessScore >= 30; // Pass threshold adjusted for 50-point scale
 
           // Ensure scores don't exceed maximum
-          correctnessScore = Math.min(correctnessScore, 10);
-          codeQualityScore = Math.min(codeQualityScore, 10);
+          correctnessScore = Math.min(correctnessScore, 50);
+          codeQualityScore = Math.min(codeQualityScore, 50);
         } else if (evaluationMode === 'compiler') {
           // Test case validation with detailed metrics
           const testResults = await CodeExecutionService.executeTestCases(finalAnswer, language, JSON.parse(question.test_cases || '[]'), participant.id);
@@ -544,14 +544,14 @@ router.post('/answer', authenticateParticipant, async (req, res) => {
           executionTimeMs = testResults.reduce((sum, r) => sum + (r.executionTime || 0), 0);
           memoryUsedKb = testResults.reduce((sum, r) => sum + (r.memoryUsage || 0), 0) / 1024;
 
-          correctnessScore = passRate * 10;
-          performanceScore = Math.max(0, 10 - (executionTimeMs / 1000)); // Penalize slow execution
+          correctnessScore = passRate * 50; // Base score: up to 50 points
+          performanceScore = Math.max(0, 50 - (executionTimeMs / 1000)); // Penalize slow execution
           codeQualityScore = CodeExecutionService.calculatePartialScore(finalAnswer, question.correct_answer, testResults, language, evaluationMode);
 
           // Ensure scores don't exceed maximum
-          correctnessScore = Math.min(correctnessScore, 10);
-          performanceScore = Math.min(performanceScore, 10);
-          codeQualityScore = Math.min(codeQualityScore, 10);
+          correctnessScore = Math.min(correctnessScore, 50);
+          performanceScore = Math.min(performanceScore, 50);
+          codeQualityScore = Math.min(codeQualityScore, 50);
 
           isCorrect = passRate >= 0.8; // 80% pass rate required
         } else if (evaluationMode === 'bugfix') {
@@ -559,7 +559,7 @@ router.post('/answer', authenticateParticipant, async (req, res) => {
           const validation = await CodeExecutionService.validateBugFix(question.correct_answer || '', finalAnswer, question.test_cases || '[]', participant.id);
           executionResults = JSON.stringify(validation);
 
-          correctnessScore = (validation.fixesApplied ? 5 : 0) + (validation.testsPass ? 5 : 0);
+          correctnessScore = (validation.fixesApplied ? 25 : 0) + (validation.testsPass ? 25 : 0); // Base score: up to 50 points
           codeQualityScore = validation.improvementScore;
           performanceScore = 0; // Not measured for bug fixes
           testCasesPassed = validation.testsPass ? 1 : 0;
@@ -569,7 +569,7 @@ router.post('/answer', authenticateParticipant, async (req, res) => {
         } else {
           // Default to simple text comparison
           isCorrect = finalAnswer.toLowerCase().includes(question.correct_answer.toLowerCase());
-          correctnessScore = isCorrect ? 10 : 0;
+          correctnessScore = isCorrect ? 50 : 0; // Base score: 50 points
         }
 
         // Handle execution failures and timeouts
@@ -587,46 +587,42 @@ router.post('/answer', authenticateParticipant, async (req, res) => {
       }
     } else {
       isCorrect = finalAnswer.toLowerCase().trim() === question.correct_answer.toLowerCase().trim();
-      correctnessScore = isCorrect ? 10 : 0;
+      correctnessScore = isCorrect ? 50 : 0; // Base score: 50 points
     }
 
-    // Calculate base score with time-based validation
-    // Only award marks if timeTaken is within question time limit
+    // Calculate time decay bonus (up to 50 points)
     let timeDecayBonus = 0;
-    let timeDecayMultiplier = 1.0;
 
     if (isCorrect && !autoSubmit) {
       // Check if submission time is within question time limit
       if (timeTaken <= question.time_limit) {
-        // Calculate time decay bonus: multiplier = e^(-decay_factor * (time_taken / time_limit))
+        // Calculate time decay bonus: up to 50 points based on speed
         const decayFactor = question.time_decay_enabled ? question.time_decay_factor || 0.1 : 0;
         if (decayFactor > 0) {
           const normalizedTime = timeTaken / question.time_limit;
-          timeDecayMultiplier = Math.exp(-decayFactor * normalizedTime);
-          timeDecayBonus = timeDecayMultiplier;
-          scoreEarned = question.marks * timeDecayMultiplier;
+          timeDecayBonus = 50 * Math.exp(-decayFactor * normalizedTime); // Up to 50 points for time decay
+          scoreEarned = correctnessScore + timeDecayBonus;
           console.log('⏰ Time decay calculation:', {
             timeTaken,
             timeLimit: question.time_limit,
             normalizedTime,
             decayFactor,
-            timeDecayMultiplier,
+            timeDecayBonus,
+            baseScore: correctnessScore,
             finalScore: scoreEarned
           });
         } else {
-          // No decay - full marks if correct and within time limit
-          scoreEarned = question.marks;
-          timeDecayBonus = 1.0;
+          scoreEarned = correctnessScore + 50; // Full time bonus if no decay
+          timeDecayBonus = 50;
         }
       } else {
-        // Time limit exceeded - no points awarded
-        scoreEarned = 0;
+        // Time limit exceeded - only base points if correct
+        scoreEarned = correctnessScore;
         timeDecayBonus = 0;
-        isCorrect = false; // Mark as incorrect if submitted after time limit
         console.log('⏰ Time limit exceeded:', {
           timeTaken,
           timeLimit: question.time_limit,
-          scoreEarned: 0
+          scoreEarned: correctnessScore
         });
       }
     } else if (autoSubmit) {
@@ -641,15 +637,13 @@ router.post('/answer', authenticateParticipant, async (req, res) => {
       timeDecayBonus = 0;
     }
 
-    // Ensure score doesn't exceed maximum marks
-    scoreEarned = Math.min(scoreEarned, question.marks);
+    // Ensure score doesn't exceed 100 points total
+    scoreEarned = Math.min(scoreEarned, 100);
 
-    // Store time decay bonus for analytics (only for correct answers)
-    timeDecayBonus = isCorrect && !autoSubmit ? timeDecayMultiplier : 0;
-
-    // Hint penalty (applied even for auto-submitted answers)
+    // Hint penalty: 10 points deduction
     if (hintUsed) {
-      scoreEarned = Math.max(0, scoreEarned - question.hint_penalty);
+      scoreEarned = Math.max(0, scoreEarned - 10);
+      console.log('💡 Hint used: 10 points deducted, new score:', scoreEarned);
     }
 
     // Additional validation: Ensure finalAnswer is never null before database insertion

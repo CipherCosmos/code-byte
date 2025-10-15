@@ -52,7 +52,6 @@ const GameInterface = () => {
   const [selectedLanguage, setSelectedLanguage] = useState("javascript");
   const [timeLeft, setTimeLeft] = useState(0);
   const [hintUsed, setHintUsed] = useState(false);
-  const [showHint, setShowHint] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [leaderboard, setLeaderboard] = useState([]);
   const [showAnswer, setShowAnswer] = useState(false);
@@ -267,10 +266,15 @@ const GameInterface = () => {
         }
       });
 
-      // Setup cheat detection
+      // Setup enhanced cheat detection
       const cheatManager = new CheatDetectionManager((cheatData) => {
         console.log("🚨 Cheat detected:", cheatData);
         socketConnection?.emit("cheatDetected", cheatData);
+
+        // Update local cheat warnings count based on severity
+        if (cheatData.type && ['dev_tools_opened', 'persistent_dev_tools', 'high_suspicious_activity', 'rapid_keyboard_activity', 'rapid_clicking', 'unusual_mouse_movement', 'frequent_window_switching', 'console_manipulation'].includes(cheatData.type)) {
+          setCheatWarnings(prev => prev + 1);
+        }
       });
       setCheatDetection(cheatManager);
 
@@ -450,10 +454,11 @@ const GameInterface = () => {
       // Timer starts counting down from the assigned time when organizer begins question
       setTimeLeft(data.question.time_limit);
       setSubmitted(false);
-      setAnswer("");
+      // Reset answer based on question type
+      const resetAnswer = (data.question.question_type === "multiple" || data.question.question_type === "multiple_choice") ? [] : "";
+      setAnswer(resetAnswer);
       setSelectedLanguage(data.question.code_language || "javascript");
       setHintUsed(false);
-      setShowHint(false);
       setShowAnswer(false);
 
       console.log("✅ Game state updated to active");
@@ -479,10 +484,11 @@ const GameInterface = () => {
       // Timer starts counting down from the assigned time when organizer begins next question
       setTimeLeft(data.question.time_limit);
       setSubmitted(false);
-      setAnswer("");
+      // Reset answer based on question type
+      const resetAnswer = (data.question.question_type === "multiple" || data.question.question_type === "multiple_choice") ? [] : "";
+      setAnswer(resetAnswer);
       setSelectedLanguage(data.question.code_language || "javascript");
       setHintUsed(false);
-      setShowHint(false);
       setShowAnswer(false);
       setAnswerResult(null);
 
@@ -539,7 +545,18 @@ const GameInterface = () => {
     // Cheat penalty
     socketConnection.on("cheatPenalty", (data) => {
       setCheatWarnings(data.warningCount);
-      toast.error(data.message);
+      toast.error(data.message, {
+        duration: 6000,
+        icon: '🚨'
+      });
+
+      // Show enhanced warning modal for severe penalties
+      if (data.warningCount >= 3) {
+        toast.error("⚠️ Multiple anti-cheat violations detected. Further violations may result in elimination.", {
+          duration: 8000,
+          icon: '⚠️'
+        });
+      }
     });
 
     // Organizer warning
@@ -1063,7 +1080,7 @@ int main() {
                       </span>
                     </div>
                     <div className="flex justify-between">
-                      <span>Cheat Warnings:</span>
+                      <span>Anti-Cheat Warnings:</span>
                       <span
                         className={`font-bold ${
                           gameAnalytics.participant.cheatWarnings > 0
@@ -1072,6 +1089,9 @@ int main() {
                         }`}
                       >
                         {gameAnalytics.participant.cheatWarnings}
+                        {gameAnalytics.participant.cheatWarnings > 0 && (
+                          <span className="text-xs ml-1">(Violations detected)</span>
+                        )}
                       </span>
                     </div>
                   </div>
@@ -1191,13 +1211,19 @@ int main() {
             </div>
 
             {cheatWarnings > 0 && (
-              <div className="mt-3 p-3 bg-red-500/20 border border-red-400/30 rounded-lg">
-                <div className="flex items-center space-x-2 text-red-200">
-                  <AlertTriangle className="h-5 w-5 flex-shrink-0" />
-                  <span className="text-sm sm:text-base">
-                    {cheatWarnings} warning{cheatWarnings > 1 ? "s" : ""} -
-                    Avoid suspicious activities
-                  </span>
+              <div className="mt-3 p-4 bg-gradient-to-r from-red-500/20 to-pink-500/20 border border-red-400/30 rounded-lg backdrop-blur-sm">
+                <div className="flex items-center space-x-3 text-red-200">
+                  <div className="p-2 bg-red-500/30 rounded-full">
+                    <AlertTriangle className="h-5 w-5 flex-shrink-0" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="font-semibold text-sm sm:text-base">
+                      Anti-Cheat Warning{cheatWarnings > 1 ? "s" : ""}: {cheatWarnings}
+                    </p>
+                    <p className="text-xs sm:text-sm text-red-300 mt-1">
+                      Suspicious activities detected. Continued violations may result in penalties.
+                    </p>
+                  </div>
                 </div>
               </div>
             )}

@@ -18,40 +18,36 @@ describe('CrosswordComponent', () => {
     render(<CrosswordComponent {...defaultProps} />);
 
     expect(screen.getByText('🔤')).toBeInTheDocument();
-    expect(screen.getByText('Crossword')).toBeInTheDocument();
-    expect(screen.getByText('Fill in the crossword answers')).toBeInTheDocument();
-    expect(screen.getByText('Format: 1A:WORD,2D:WORD,... (use comma to separate entries)')).toBeInTheDocument();
+    expect(screen.getByText('Crossword Puzzle')).toBeInTheDocument();
+    expect(screen.getByText('Fill in the crossword grid')).toBeInTheDocument();
+    expect(screen.getByText('Click on cells to fill them. Use Tab to switch between across/down mode.')).toBeInTheDocument();
   });
 
-  it('renders textarea with correct placeholder', () => {
+  it('renders answer format info', () => {
     render(<CrosswordComponent {...defaultProps} />);
 
-    const textarea = screen.getByPlaceholderText('1A:EXAMPLE,2D:TEST,...');
-    expect(textarea).toBeInTheDocument();
+    expect(screen.getByText('Answer Format:')).toBeInTheDocument();
+    expect(screen.getByText('Your answers will be saved in the format: 1A:WORD,2D:TEST')).toBeInTheDocument();
   });
 
-  it('handles text input correctly', async () => {
-    const user = userEvent.setup();
-    render(<CrosswordComponent {...defaultProps} />);
+  it('handles answer updates correctly', () => {
+    const mockSetAnswer = jest.fn();
+    render(<CrosswordComponent {...defaultProps} setAnswer={mockSetAnswer} />);
 
-    const textarea = screen.getByPlaceholderText('1A:EXAMPLE,2D:TEST,...');
-    await user.type(textarea, '1A:HELLO,2D:WORLD');
-
-    expect(defaultProps.setAnswer).toHaveBeenCalledWith('1A:HELLO,2D:WORLD');
+    // The component should initialize with empty answer
+    expect(mockSetAnswer).not.toHaveBeenCalled();
   });
 
-  it('displays the current answer value', () => {
+  it('displays current answer format info', () => {
     render(<CrosswordComponent {...defaultProps} answer="1A:TEST,2D:WORD" />);
 
-    const textarea = screen.getByDisplayValue('1A:TEST,2D:WORD');
-    expect(textarea).toBeInTheDocument();
+    expect(screen.getByText('Current answer: 1A:TEST,2D:WORD')).toBeInTheDocument();
   });
 
-  it('disables textarea when submitted', () => {
-    render(<CrosswordComponent {...defaultProps} submitted={true} />);
+  it('shows clear button', () => {
+    render(<CrosswordComponent {...defaultProps} />);
 
-    const textarea = screen.getByPlaceholderText('1A:EXAMPLE,2D:TEST,...');
-    expect(textarea).toBeDisabled();
+    expect(screen.getByText('Clear')).toBeInTheDocument();
   });
 
   it('renders clues when crossword_clues is provided', () => {
@@ -139,34 +135,31 @@ describe('CrosswordComponent', () => {
     expect(screen.getByText('3A:')).toBeInTheDocument();
   });
 
-  it('applies correct CSS classes', () => {
+  it('shows direction controls', () => {
     render(<CrosswordComponent {...defaultProps} />);
 
-    const textarea = screen.getByPlaceholderText('1A:EXAMPLE,2D:TEST,...');
-    expect(textarea).toHaveClass('input', 'w-full', 'h-40', 'resize-none', 'text-base', 'py-3', 'px-4');
+    expect(screen.getByText('Direction:')).toBeInTheDocument();
+    expect(screen.getByText('Across')).toBeInTheDocument();
   });
 
-  it('has proper accessibility attributes', () => {
+  it('shows crossword grid', () => {
     render(<CrosswordComponent {...defaultProps} />);
 
-    const textarea = screen.getByPlaceholderText('1A:EXAMPLE,2D:TEST,...');
-    expect(textarea).toHaveAttribute('placeholder', '1A:EXAMPLE,2D:TEST,...');
+    // Should have a grid container
+    const gridContainer = document.querySelector('.inline-grid');
+    expect(gridContainer).toBeInTheDocument();
   });
 
   it('handles empty answer correctly', () => {
     render(<CrosswordComponent {...defaultProps} answer="" />);
 
-    const textarea = screen.getByPlaceholderText('1A:EXAMPLE,2D:TEST,...');
-    expect(textarea).toHaveValue('');
+    expect(screen.getByText('Current answer: No answers yet')).toBeInTheDocument();
   });
 
-  it('maintains answer value after re-render', () => {
-    const { rerender } = render(<CrosswordComponent {...defaultProps} answer="1A:TEST" />);
+  it('displays answer when provided', () => {
+    render(<CrosswordComponent {...defaultProps} answer="1A:TEST,2D:WORD" />);
 
-    expect(screen.getByDisplayValue('1A:TEST')).toBeInTheDocument();
-
-    rerender(<CrosswordComponent {...defaultProps} answer="1A:TEST" />);
-    expect(screen.getByDisplayValue('1A:TEST')).toBeInTheDocument();
+    expect(screen.getByText('Current answer: 1A:TEST,2D:WORD')).toBeInTheDocument();
   });
 
   it('renders clues in responsive grid layout', () => {
@@ -179,6 +172,10 @@ describe('CrosswordComponent', () => {
       {...defaultProps}
       question={{ crossword_clues: JSON.stringify(clues) }}
     />);
+
+    // Click show hints button to reveal clues
+    const showHintsButton = screen.getByText('Show Hints');
+    showHintsButton.click();
 
     const cluesContainer = screen.getByText('Clues:').closest('div').querySelector('.grid');
     expect(cluesContainer).toHaveClass('grid-cols-1', 'sm:grid-cols-2');
