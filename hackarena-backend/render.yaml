@@ -1,0 +1,34 @@
+services:
+  - type: web
+    name: hackarena-backend
+    runtime: node
+    buildCommand: npm install && npm run build
+    startCommand: npm run start:render
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        fromSecret: PORT
+      - key: DATABASE_URL
+        fromSecret: DATABASE_URL
+      - key: JWT_SECRET
+        fromSecret: JWT_SECRET
+      - key: FRONTEND_URL
+        fromSecret: FRONTEND_URL
+      - key: CLOUDINARY_CLOUD_NAME
+        fromSecret: CLOUDINARY_CLOUD_NAME
+      - key: CLOUDINARY_API_KEY
+        fromSecret: CLOUDINARY_API_KEY
+      - key: CLOUDINARY_API_SECRET
+        fromSecret: CLOUDINARY_API_SECRET
+      - key: CLOUDINARY_URL
+        fromSecret: CLOUDINARY_URL
+      - key: GOOGLE_CLIENT_ID
+        fromSecret: GOOGLE_CLIENT_ID
+      - key: GOOGLE_CLIENT_SECRET
+        fromSecret: GOOGLE_CLIENT_SECRET
+    healthCheckPath: /api/health
+    disk:
+      name: hackarena-data
+      mountPath: /opt/render/project/src/data
+      sizeGB: 1

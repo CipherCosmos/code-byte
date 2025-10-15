@@ -1,0 +1,59 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-dsba-light text-gray-900 font-sans;
+  }
+
+  html {
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+}
+
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none ring-offset-background;
+  }
+
+  .btn-primary {
+    @apply bg-dsba-navy text-white hover:bg-blue-800 h-10 py-2 px-4;
+  }
+
+  .btn-secondary {
+    @apply bg-gray-100 text-gray-900 hover:bg-gray-200 h-10 py-2 px-4;
+  }
+
+  .btn-danger {
+    @apply bg-red-600 text-white hover:bg-red-700 h-10 py-2 px-4;
+  }
+
+  .input {
+    @apply flex h-10 w-full rounded-md border border-gray-300 bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .card {
+    @apply rounded-lg border bg-white text-card-foreground shadow-sm;
+  }
+
+  .dsba-gradient {
+    @apply bg-gradient-to-br from-dsba-navy via-blue-700 to-blue-900;
+  }
+
+  .dsba-hero-gradient {
+    @apply bg-gradient-to-br from-dsba-navy via-blue-800 to-blue-900;
+  }
+
+  .participant-interface {
+    @apply min-h-screen bg-gradient-to-br from-dsba-navy via-blue-900 to-indigo-900;
+  }
+
+  .dsba-logo {
+    @apply text-dsba-navy font-bold text-2xl;
+  }
+
+  .dsba-accent {
+    @apply text-dsba-gold;
+  }
+}
