@@ -24,6 +24,8 @@ import { PageLoader } from '../../components/ProgressIndicator'
 import { HelpTooltip } from '../../components/Tooltip'
 import { useCommonShortcuts } from '../../hooks/useKeyboardShortcuts'
 import Header from '../../components/Header'
+import AntiCheatMonitor from '../../components/AntiCheatMonitor'
+import CheatAlertPanel from '../../components/CheatAlertPanel'
 
 const Dashboard = () => {
   const [games, setGames] = useState([])
@@ -199,6 +201,16 @@ const Dashboard = () => {
             </div>
           </div>
         </div>
+
+        {/* Anti-Cheat Monitor for Active Games */}
+        {games.filter(g => g.status === 'active').length > 0 && (
+          <div className="mb-8">
+            <AntiCheatMonitor
+              gameId={games.find(g => g.status === 'active')?.id}
+              socket={null} // Will need to be passed from parent context
+            />
+          </div>
+        )}
 
         {/* Games Section */}
         <div className="flex justify-between items-center mb-6">

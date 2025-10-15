@@ -40,6 +40,9 @@ import ErrorBoundary from "../../components/ErrorBoundary";
 import ConnectionStatus from "../../components/ConnectionStatus";
 import ErrorFallback from "../../components/ErrorFallback";
 import QuestionTypeRouter from "../../components/QuestionTypeRouter";
+import AntiCheatMonitor from "../../components/AntiCheatMonitor";
+import CheatAlertPanel from "../../components/CheatAlertPanel";
+import TimeScoringVisualizer from "../../components/TimeScoringVisualizer";
 
 const GameInterface = () => {
   const { gameCode } = useParams();
@@ -70,9 +73,14 @@ const GameInterface = () => {
   const [codeHints, setCodeHints] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showTestPreview, setShowTestPreview] = useState(false);
+  const [showHint, setShowHint] = useState(false);
+  const [isInitializing, setIsInitializing] = useState(true);
 
   useEffect(() => {
-    initializeGame();
+    setIsInitializing(true);
+    initializeGame().finally(() => {
+      setIsInitializing(false);
+    });
 
     return () => {
       // Cleanup
@@ -152,7 +160,8 @@ const GameInterface = () => {
   useEffect(() => {
     let timer;
 
-    if (timeLeft > 0 && !submitted && gameState === "active" && !isPaused) {
+    // Only start timer after initialization is complete and we have valid state
+    if (!isInitializing && timeLeft > 0 && !submitted && gameState === "active" && !isPaused) {
       timer = setInterval(() => {
         setTimeLeft((prev) => {
           if (prev <= 1) {
@@ -177,6 +186,7 @@ const GameInterface = () => {
         });
       }, 1000);
     } else if (
+      !isInitializing &&
       timeLeft === 0 &&
       !submitted &&
       gameState === "active" &&
@@ -202,7 +212,7 @@ const GameInterface = () => {
         clearInterval(timer);
       }
     };
-  }, [timeLeft, submitted, gameState, isPaused, socket, currentQuestion, participant]);
+  }, [timeLeft, submitted, gameState, isPaused, socket, currentQuestion, participant, isInitializing]);
 
   const initializeGame = useCallback(async () => {
     try {
@@ -433,24 +443,27 @@ const GameInterface = () => {
 
     // Game started
     socketConnection.on("gameStarted", (data) => {
-      setCurrentQuestion(data.question);
-      setGameState("active");
-      // Timer starts counting down from the assigned time when organizer begins question
-      setTimeLeft(data.question.time_limit);
-      setSubmitted(false);
-      // Reset answer based on question type
-      const resetAnswer = (data.question.question_type === "multiple" || data.question.question_type === "multiple_choice") ? [] : "";
-      setAnswer(resetAnswer);
-      setSelectedLanguage(data.question.code_language || "javascript");
-      setHintUsed(false);
-      setShowAnswer(false);
+      // Only process if not initializing to prevent auto-submission on refresh
+      if (!isInitializing) {
+        setCurrentQuestion(data.question);
+        setGameState("active");
+        // Timer starts counting down from the assigned time when organizer begins question
+        setTimeLeft(data.question.time_limit);
+        setSubmitted(false);
+        // Reset answer based on question type
+        const resetAnswer = (data.question.question_type === "multiple" || data.question.question_type === "multiple_choice") ? [] : "";
+        setAnswer(resetAnswer);
+        setSelectedLanguage(data.question.code_language || "javascript");
+        setHintUsed(false);
+        setShowAnswer(false);
 
-      // Start cheat detection
-      if (cheatDetection) {
-        cheatDetection.startMonitoring();
+        // Start cheat detection
+        if (cheatDetection) {
+          cheatDetection.startMonitoring();
+        }
+
+        toast.success("Game started! Good luck!");
       }
-
-      toast.success("Game started! Good luck!");
     });
 
     // Next question
@@ -563,17 +576,24 @@ const GameInterface = () => {
         data,
         currentSubmitted: submitted,
         currentTimeLeft: timeLeft,
+        isInitializing,
         timestamp: new Date().toISOString()
       });
-      // Force timer to zero for visual synchronization
-      setTimeLeft(0);
 
-      // Only auto-submit if not already submitted
-      if (!submitted) {
-        console.log('[CLIENT SOCKET] Triggering auto-submit from socket event');
-        autoSubmit();
+      // Only process if not initializing to prevent auto-submission on refresh
+      if (!isInitializing) {
+        // Force timer to zero for visual synchronization
+        setTimeLeft(0);
+
+        // Only auto-submit if not already submitted
+        if (!submitted) {
+          console.log('[CLIENT SOCKET] Triggering auto-submit from socket event');
+          autoSubmit();
+        } else {
+          console.log('[CLIENT SOCKET] Skipping auto-submit - already submitted');
+        }
       } else {
-        console.log('[CLIENT SOCKET] Skipping auto-submit - already submitted');
+        console.log('[CLIENT SOCKET] Skipping questionTimeExpired - still initializing');
       }
     });
   };
@@ -728,8 +748,16 @@ const GameInterface = () => {
       timeLeft,
       gameState,
       isPaused,
+      isInitializing,
       timestamp: new Date().toISOString()
     });
+
+    // Prevent auto-submit during initialization to avoid premature submissions on refresh
+    if (isInitializing) {
+      console.log('[CLIENT AUTOSUBMIT] Skipping auto-submit - still initializing');
+      return;
+    }
+
     if (!submitted && currentQuestion) {
       // Force submit with current answer (can be empty)
 
@@ -750,7 +778,7 @@ const GameInterface = () => {
         hasCurrentQuestion: !!currentQuestion
       });
     }
-  }, [submitted, currentQuestion, answer, timeLeft, gameState, isPaused, socket, participant, submitAnswer]);
+  }, [submitted, currentQuestion, answer, timeLeft, gameState, isPaused, socket, participant, submitAnswer, isInitializing]);
 
   const useHint = () => {
     if (!hintUsed && currentQuestion?.hint) {
@@ -1144,6 +1172,7 @@ int main() {
   // Active game screen
   return (
     <ErrorBoundary>
+      <CheatAlertPanel socket={socket} isVisible={true} />
       <div className="participant-interface min-h-screen p-4">
         <ConnectionStatus socket={socket} onReconnect={handleReconnect} />
         <div className="max-w-4xl mx-auto">
@@ -1297,6 +1326,18 @@ int main() {
                     />
                   </div>
                 )}
+
+              {/* Time Scoring Visualizer */}
+              {currentQuestion && !submitted && (
+                <TimeScoringVisualizer
+                  questionData={currentQuestion}
+                  currentAnswer={answer}
+                  onTimeUpdate={(timeData) => {
+                    // Update scoring preview
+                    console.log('Time scoring update:', timeData);
+                  }}
+                />
+              )}
 
               {/* Answer Input */}
               <div className="mb-4 sm:mb-6">
