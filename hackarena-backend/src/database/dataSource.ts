@@ -28,7 +28,6 @@ export const AppDataSource = new DataSource({
   password: process.env.DATABASE_URL ? undefined : process.env.DATABASE_PASSWORD,
   database: process.env.DATABASE_URL ? undefined : (process.env.DATABASE_NAME || 'defaultdb'),
   ssl: {
-    ca: fs.readFileSync(path.join(__dirname, 'aiven-ca.pem')),
     rejectUnauthorized: false,
   },
   synchronize: false, // Use migrations instead
