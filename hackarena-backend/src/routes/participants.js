@@ -385,9 +385,9 @@ router.post('/answer', authenticateParticipant, async (req, res) => {
 
     // Validate required fields - allow null answer for auto-submitted responses
     const isAutoSubmit = autoSubmit === true || autoSubmit === 'true';
-    if (!questionId || (!isAutoSubmit && answer == null) || hintUsed === undefined || timeTaken === undefined) {
+    if (!questionId || hintUsed === undefined || timeTaken === undefined) {
       return res.status(400).json({
-        error: 'Missing required fields: questionId, answer (unless auto-submitted), hintUsed, timeTaken are all required'
+        error: 'Missing required fields: questionId, hintUsed, timeTaken are all required'
       });
     }
 

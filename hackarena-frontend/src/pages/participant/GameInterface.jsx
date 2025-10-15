@@ -85,22 +85,36 @@ const GameInterface = () => {
     };
   }, []);
 
-  // Load Prism.js components dynamically
+  // Load Prism.js components dynamically with better error handling
   useEffect(() => {
     const loadPrismComponents = async () => {
       try {
-        // Ensure Prism.js components are loaded dynamically
-        const clike = await import("prismjs/components/prism-clike");
-        const javascript = await import("prismjs/components/prism-javascript");
-        const python = await import("prismjs/components/prism-python");
-        const java = await import("prismjs/components/prism-java");
-        const cpp = await import("prismjs/components/prism-cpp");
+        // Ensure Prism.js components are loaded dynamically with individual error handling
+        const components = [
+          { name: 'clike', import: () => import("prismjs/components/prism-clike") },
+          { name: 'javascript', import: () => import("prismjs/components/prism-javascript") },
+          { name: 'python', import: () => import("prismjs/components/prism-python") },
+          { name: 'java', import: () => import("prismjs/components/prism-java") },
+          { name: 'cpp', import: () => import("prismjs/components/prism-cpp") }
+        ];
 
-        if (!clike || !javascript || !python || !java || !cpp) {
-          throw new Error("One or more Prism.js components failed to load.");
+        const loadedComponents = [];
+        for (const component of components) {
+          try {
+            const module = await component.import();
+            loadedComponents.push(component.name);
+          } catch (componentError) {
+            console.warn(`Failed to load Prism.js component ${component.name}:`, componentError);
+          }
         }
 
-        setPrismLoaded(true);
+        // Set loaded if at least basic components are available
+        if (loadedComponents.includes('javascript') || loadedComponents.includes('clike')) {
+          setPrismLoaded(true);
+        } else {
+          console.warn("No Prism.js components loaded - syntax highlighting will be disabled");
+          setPrismLoaded(false);
+        }
       } catch (error) {
         console.error("Failed to load Prism.js components:", error);
         setPrismLoaded(false);
@@ -143,6 +157,13 @@ const GameInterface = () => {
         setTimeLeft((prev) => {
           if (prev <= 1) {
             // Trigger server-side auto-submit instead of client-side
+            console.log('[CLIENT TIMER] Time expired, emitting questionTimeExpired', {
+              gameId: participant?.gameId,
+              questionId: currentQuestion?.id,
+              timeLeft: prev,
+              submitted,
+              timestamp: new Date().toISOString()
+            });
             if (socket && currentQuestion) {
               socket.emit('questionTimeExpired', {
                 gameId: participant?.gameId,
@@ -162,6 +183,12 @@ const GameInterface = () => {
       !isPaused
     ) {
       // Additional check in case timer wasn't running but time is 0
+      console.log('[CLIENT TIMER] Additional auto-submit check triggered', {
+        gameId: participant?.gameId,
+        questionId: currentQuestion?.id,
+        submitted,
+        timestamp: new Date().toISOString()
+      });
       if (socket && currentQuestion) {
         socket.emit('questionTimeExpired', {
           gameId: participant?.gameId,
@@ -169,7 +196,6 @@ const GameInterface = () => {
         });
       }
       autoSubmit();
-    } else {
     }
     return () => {
       if (timer) {
@@ -358,15 +384,16 @@ const GameInterface = () => {
             // If answers are revealed, show the answer immediately
             setShowAnswer(true);
             setSubmitted(true); // Mark as submitted since answer is revealed
+            setTimeLeft(0); // Ensure timer shows 0 when answers are revealed
           } else {
-            // Calculate time left only if answers not revealed
-            const calculatedTimeLeft = Math.max(
+            // Calculate time left based on server timestamp only if answers not revealed
+            const serverTimeLeft = Math.max(
               0,
               Math.floor(
                 (new Date(activeQuestion.question_ends_at) - new Date()) / 1000
               )
             );
-            setTimeLeft(calculatedTimeLeft);
+            setTimeLeft(serverTimeLeft);
           }
         } else if (updatedParticipant.gameStatus === "completed") {
           setGameState("ended");
@@ -406,7 +433,6 @@ const GameInterface = () => {
 
     // Game started
     socketConnection.on("gameStarted", (data) => {
-
       setCurrentQuestion(data.question);
       setGameState("active");
       // Timer starts counting down from the assigned time when organizer begins question
@@ -533,13 +559,21 @@ const GameInterface = () => {
 
     // Time expired with enhanced synchronization
     socketConnection.on("questionTimeExpired", (data) => {
-
+      console.log('[CLIENT SOCKET] Received questionTimeExpired event', {
+        data,
+        currentSubmitted: submitted,
+        currentTimeLeft: timeLeft,
+        timestamp: new Date().toISOString()
+      });
       // Force timer to zero for visual synchronization
       setTimeLeft(0);
 
       // Only auto-submit if not already submitted
       if (!submitted) {
+        console.log('[CLIENT SOCKET] Triggering auto-submit from socket event');
         autoSubmit();
+      } else {
+        console.log('[CLIENT SOCKET] Skipping auto-submit - already submitted');
       }
     });
   };
@@ -584,9 +618,15 @@ const GameInterface = () => {
         const sessionToken = localStorage.getItem("hackarena_session");
         const timeTaken = currentQuestion.time_limit - timeLeft;
 
+        // Ensure answer is always a string before validation/submission
+        let processedAnswer = answer;
+        if (typeof answer !== 'string' && !Array.isArray(answer)) {
+          processedAnswer = String(answer || '');
+        }
+
         // Validate code submissions (skip for auto-submit with empty answers)
         if (currentQuestion.question_type === "code" && !isAutoSubmit) {
-          const validation = validateCodeSubmission(answer, selectedLanguage);
+          const validation = validateCodeSubmission(processedAnswer, selectedLanguage);
           if (!validation.valid) {
             toast.error(validation.error);
             setIsSubmitting(false);
@@ -595,9 +635,9 @@ const GameInterface = () => {
         }
 
         // Handle multiple answers - convert array to comma-separated string for backend
-        let finalAnswer = answer;
-        if ((currentQuestion.question_type === "multiple" || currentQuestion.question_type === "multiple_choice") && Array.isArray(answer)) {
-          finalAnswer = answer.join(',');
+        let finalAnswer = processedAnswer;
+        if ((currentQuestion.question_type === "multiple" || currentQuestion.question_type === "multiple_choice") && Array.isArray(processedAnswer)) {
+          finalAnswer = processedAnswer.join(',');
         }
 
         const payload = {
@@ -677,22 +717,38 @@ const GameInterface = () => {
         setIsSubmitting(false);
       }
     },
-    [submitted, currentQuestion, answer, hintUsed, timeLeft, isSubmitting]
+    [submitted, currentQuestion, answer, hintUsed, timeLeft, isSubmitting, selectedLanguage]
   );
 
   const autoSubmit = useCallback(() => {
+    console.log('[CLIENT AUTOSUBMIT] autoSubmit called', {
+      submitted,
+      currentQuestion: currentQuestion?.id,
+      answer,
+      timeLeft,
+      gameState,
+      isPaused,
+      timestamp: new Date().toISOString()
+    });
     if (!submitted && currentQuestion) {
       // Force submit with current answer (can be empty)
 
       // Emit questionTimeExpired to server to handle synchronized auto-submission
       if (socket) {
+        console.log('[CLIENT AUTOSUBMIT] Emitting questionTimeExpired to server');
         socket.emit('questionTimeExpired', {
           gameId: participant?.gameId,
           questionId: currentQuestion.id
         });
       }
 
+      console.log('[CLIENT AUTOSUBMIT] Calling submitAnswer(true)');
       submitAnswer(true);
+    } else {
+      console.log('[CLIENT AUTOSUBMIT] Skipping auto-submit - conditions not met', {
+        submitted,
+        hasCurrentQuestion: !!currentQuestion
+      });
     }
   }, [submitted, currentQuestion, answer, timeLeft, gameState, isPaused, socket, participant, submitAnswer]);
 
@@ -1338,7 +1394,7 @@ int main() {
                   ) : (
                     <>
                       <Send className="h-5 w-5 mr-2" />
-                      {answer.trim() ? 'Submit Answer' : 'Submit (Empty Answer)'}
+                      {String(answer || '').trim() ? 'Submit Answer' : 'Submit (Empty Answer)'}
                     </>
                   )}
                 </button>

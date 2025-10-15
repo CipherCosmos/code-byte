@@ -236,8 +236,17 @@ export function setupSocketHandlers(io) {
       try {
         const { gameId, questionId } = data;
 
+        console.log('[SERVER SOCKET] questionTimeExpired received', {
+          gameId,
+          questionId,
+          socketId: socket.id,
+          participantId: socket.participantId,
+          timestamp: new Date().toISOString()
+        });
+
         // Validate input data
         if (!gameId || !questionId) {
+          console.log('[SERVER SOCKET] Invalid data - missing gameId or questionId');
           return;
         }
 
@@ -248,12 +257,18 @@ export function setupSocketHandlers(io) {
         );
 
         if (session?.auto_submitted_at) {
+          console.log('[SERVER SOCKET] Auto-submit already processed for this question', {
+            gameId,
+            questionId,
+            autoSubmittedAt: session.auto_submitted_at
+          });
           return;
         }
 
         // Get question details to determine time limit
         const question = await db.getAsync('SELECT * FROM questions WHERE id = $1', [questionId]);
         if (!question) {
+          console.log('[SERVER SOCKET] Question not found', { questionId });
           return;
         }
 
@@ -270,14 +285,28 @@ export function setupSocketHandlers(io) {
           [gameId, questionId]
         );
 
+        console.log('[SERVER SOCKET] Unanswered participants found', {
+          gameId,
+          questionId,
+          unansweredCount: unansweredParticipants.length,
+          unansweredIds: unansweredParticipants.map(p => p.id)
+        });
+
         if (unansweredParticipants.length > 0) {
           // Mark auto-submit as processed to prevent duplicates
+          console.log('[SERVER SOCKET] Marking auto-submit as processed');
           await db.runAsync(
             'UPDATE game_sessions SET auto_submitted_at = $1 WHERE game_id = $2 AND current_question_id = $3',
             [currentTimeUTC, gameId, questionId]
           );
 
           for (const participant of unansweredParticipants) {
+            console.log('[SERVER SOCKET] Auto-submitting for participant', {
+              participantId: participant.id,
+              questionId,
+              gameId
+            });
+
             // Auto-submit with time_taken equal to time_limit (indicating time expired)
             // Use the same scoring logic as manual submission but with autoSubmit=true
             const timeTaken = question.time_limit;
@@ -309,12 +338,18 @@ export function setupSocketHandlers(io) {
         }
 
         // Emit time expired to all participants with synchronized timestamp
+        console.log('[SERVER SOCKET] Emitting questionTimeExpired to all participants', {
+          gameId,
+          timestamp: currentTimeUTC,
+          autoSubmittedCount: unansweredParticipants.length
+        });
         io.to(`game-${gameId}`).emit('questionTimeExpired', {
           timestamp: currentTimeUTC,
           autoSubmittedCount: unansweredParticipants.length
         });
 
       } catch (error) {
+        console.error('questionTimeExpired handler error:', error);
       }
     });
 
