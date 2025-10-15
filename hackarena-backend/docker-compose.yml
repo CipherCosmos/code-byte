@@ -1,0 +1,56 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: hackarena-postgres
+    environment:
+      POSTGRES_USER: hackarena
+      POSTGRES_PASSWORD: hackarena_password
+      POSTGRES_DB: hackarena_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./src/database/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hackarena -d hackarena_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - hackarena-network
+
+  backend:
+    build: .
+    container_name: hackarena-backend
+    ports:
+      - "10000:10000"
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: development
+      PORT: 10000
+      DATABASE_URL: postgresql://hackarena:hackarena_password@db:5432/hackarena_db
+      DATABASE_PASSWORD: hackarena_password
+      JWT_SECRET: dev-jwt-secret-change-in-production
+      FRONTEND_URL: http://localhost:3000
+      CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME:-}
+      CLOUDINARY_API_KEY: ${CLOUDINARY_API_KEY:-}
+      CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET:-}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+    volumes:
+      - .:/app
+      - /app/node_modules
+    command: npm run dev
+    networks:
+      - hackarena-network
+
+volumes:
+  postgres_data:
+
+networks:
+  hackarena-network:
+    driver: bridge
