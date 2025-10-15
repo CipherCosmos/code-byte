@@ -8,7 +8,7 @@ const pool = new Pool({
   port: 14244,
   database: 'defaultdb',
   user: 'avnadmin',
-  password: process.env.DATABASE_PASSWORD,
+  password: "AVNS_xajv7yJVEV30CJzLhRR",
   ssl: { rejectUnauthorized: false },
   max: 20, // Maximum number of clients in the pool
   idleTimeoutMillis: 30000, // Close idle clients after 30 seconds
