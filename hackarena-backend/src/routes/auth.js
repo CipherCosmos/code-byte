@@ -2,8 +2,8 @@ import express from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { OAuth2Client } from 'google-auth-library';
-import { AppDataSource } from '../database/dataSource.ts';
-import { User } from '../entities/User.ts';
+import { AppDataSource } from '../database/dataSource.js';
+import { User } from '../entities/User.js';
 import { authenticateToken } from '../middleware/auth.js';
 
 // Validate JWT_SECRET is available (optional for debugging)

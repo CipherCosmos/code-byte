@@ -1,6 +1,6 @@
 import { Entity, PrimaryColumn, Column, ManyToOne, JoinColumn } from 'typeorm';
-import { Game } from './Game.ts';
-import { Question } from './Question.ts';
+import { Game } from './Game';
+import { Question } from './Question';
 
 @Entity('game_sessions')
 export class GameSession {

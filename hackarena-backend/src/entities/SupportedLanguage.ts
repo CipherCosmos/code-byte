@@ -1,5 +1,5 @@
 import { Entity, PrimaryColumn, Column, CreateDateColumn, OneToMany } from 'typeorm';
-import { CodeTemplate } from './CodeTemplate.ts';
+import { CodeTemplate } from './CodeTemplate';
 
 @Entity('supported_languages')
 export class SupportedLanguage {

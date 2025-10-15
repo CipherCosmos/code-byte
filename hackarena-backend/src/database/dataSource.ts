@@ -1,13 +1,13 @@
 import { DataSource } from 'typeorm';
-import { User } from '../entities/User.ts';
-import { Game } from '../entities/Game.ts';
-import { Question } from '../entities/Question.ts';
-import { Participant } from '../entities/Participant.ts';
-import { Answer } from '../entities/Answer.ts';
-import { GameSession } from '../entities/GameSession.ts';
-import { CodeExecutionResult } from '../entities/CodeExecutionResult.ts';
-import { SupportedLanguage } from '../entities/SupportedLanguage.ts';
-import { CodeTemplate } from '../entities/CodeTemplate.ts';
+import { User } from '../entities/User.js';
+import { Game } from '../entities/Game.js';
+import { Question } from '../entities/Question.js';
+import { Participant } from '../entities/Participant.js';
+import { Answer } from '../entities/Answer.js';
+import { GameSession } from '../entities/GameSession.js';
+import { CodeExecutionResult } from '../entities/CodeExecutionResult.js';
+import { SupportedLanguage } from '../entities/SupportedLanguage.js';
+import { CodeTemplate } from '../entities/CodeTemplate.js';
 
 export const AppDataSource = new DataSource({
   type: 'postgres',

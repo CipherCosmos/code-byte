@@ -1,7 +1,7 @@
 import { Entity, PrimaryColumn, Column, CreateDateColumn, ManyToOne, OneToMany, JoinColumn } from 'typeorm';
-import { Participant } from './Participant.ts';
-import { Question } from './Question.ts';
-import { CodeExecutionResult } from './CodeExecutionResult.ts';
+import { Participant } from './Participant';
+import { Question } from './Question';
+import { CodeExecutionResult } from './CodeExecutionResult';
 
 @Entity('answers')
 export class Answer {
