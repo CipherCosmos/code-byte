@@ -449,7 +449,7 @@ export async function initializeDatabase() {
 
     // Add auto_submitted_at column for tracking auto-submission timestamps
     try {
-      await db.runAsync(`ALTER TABLE answers ADD COLUMN auto_submitted_at TIMESTAMP`);
+      await db.runAsync(`ALTER TABLE answers ADD COLUMN IF NOT EXISTS auto_submitted_at TIMESTAMP`);
     } catch (error) {
       // Column might already exist, ignore error
     }
@@ -492,11 +492,17 @@ export async function initializeDatabase() {
         answers_revealed BOOLEAN DEFAULT FALSE,
         total_participants INTEGER DEFAULT 0,
         answered_participants INTEGER DEFAULT 0,
-        auto_submitted_at TIMESTAMP,
         FOREIGN KEY (game_id) REFERENCES games (id),
         FOREIGN KEY (current_question_id) REFERENCES questions (id)
       )
     `);
+
+    // Add auto_submitted_at column to game_sessions table if it doesn't exist
+    try {
+      await db.runAsync(`ALTER TABLE game_sessions ADD COLUMN IF NOT EXISTS auto_submitted_at TIMESTAMP`);
+    } catch (error) {
+      // Column might already exist, ignore error
+    }
 
     // Code execution results table
     await db.runAsync(`

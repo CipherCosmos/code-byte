@@ -1120,7 +1120,7 @@ const QuestionForm = ({ question = null, onSave, onCancel }) => {
                           formDataUpload.append('image', file);
 
                           try {
-                            const response = await fetch('/api/games/upload-image', {
+                            const response = await fetch(`http://localhost:10000/api/games/upload-image`, {
                               method: 'POST',
                               body: formDataUpload,
                               headers: {

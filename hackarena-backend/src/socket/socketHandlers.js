@@ -289,12 +289,12 @@ export function setupSocketHandlers(io) {
         const currentTimeUTC = new Date().toISOString();
         console.log('⏰ Auto-submit triggered at UTC time:', currentTimeUTC);
 
-        // Auto-submit blank answers for participants who haven't answered
+        // Auto-submit blank answers for participants who haven't manually submitted answers
         const unansweredParticipants = await db.allAsync(
           `SELECT p.id FROM participants p
             WHERE p.game_id = $1 AND p.status = 'active'
             AND p.id NOT IN (
-              SELECT a.participant_id FROM answers a WHERE a.question_id = $2
+              SELECT a.participant_id FROM answers a WHERE a.question_id = $2 AND a.auto_submitted = false
             )`,
           [gameId, questionId]
         );
@@ -323,8 +323,8 @@ export function setupSocketHandlers(io) {
             console.log('⏰ Auto-submitting for participant:', participant.id, 'time taken:', timeTaken);
 
             await db.runAsync(
-              'INSERT INTO answers (participant_id, question_id, answer_text, is_correct, score_earned, time_taken, time_decay_bonus, auto_submitted, auto_submitted_at, submitted_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)',
-              [participant.id, questionId, '', isCorrect, scoreEarned, timeTaken, timeDecayBonus, true, currentTimeUTC, currentTimeUTC]
+              'INSERT INTO answers (participant_id, question_id, answer, answer_text, is_correct, score_earned, time_taken, time_decay_bonus, auto_submitted, auto_submitted_at, submitted_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)',
+              [participant.id, questionId, '', '', isCorrect, scoreEarned, timeTaken, timeDecayBonus, true, currentTimeUTC, currentTimeUTC]
             );
 
             // Update participant total score

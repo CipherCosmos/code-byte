@@ -432,52 +432,29 @@ router.post('/answer', authenticateParticipant, async (req, res) => {
 
     console.log('🔍 DEBUG: Required fields validation passed');
 
-    // Ensure empty strings are preserved as empty strings, not converted to null
-    // For auto-submitted answers, always use empty string to prevent null constraint violations
-    const finalAnswer = (answer == null || isAutoSubmit) ? '' : String(answer);
-    console.log('🔍 DEBUG: Final answer after processing:', finalAnswer?.substring(0, 100) || 'empty string');
-
-    // Check if already answered with retry logic for race conditions
+    // Check if already answered - prevent duplicate submissions
     console.log('🔍 DEBUG: Checking for existing answer...');
-    let existingAnswer = null;
-    const maxRetries = 3;
-
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-      existingAnswer = await db.getAsync(
-        'SELECT * FROM answers WHERE participant_id = $1 AND question_id = $2',
-        [participant.id, questionId]
-      );
-
-      if (existingAnswer) {
-        break; // Found existing answer
-      }
-
-      // If not found and this isn't the last attempt, wait a bit and retry
-      if (attempt < maxRetries) {
-        console.log(`🔍 DEBUG: Answer not found on attempt ${attempt}, retrying...`);
-        await new Promise(resolve => setTimeout(resolve, 50)); // 50ms delay
-      }
-    }
+    const existingAnswer = await db.getAsync(
+      'SELECT id, is_correct, score_earned FROM answers WHERE participant_id = $1 AND question_id = $2',
+      [participant.id, questionId]
+    );
 
     console.log('🔍 DEBUG: Existing answer check result:', !!existingAnswer);
     if (existingAnswer) {
       console.log('🔍 DEBUG: Participant already answered, rejecting submission');
-      return res.status(409).json({ error: 'Already answered this question' });
+      return res.status(409).json({
+        error: 'Already answered this question',
+        message: 'You have already submitted an answer for this question. Only the first submission counts for scoring.'
+      });
     }
 
-    // Additional check: if this is an auto-submit, verify the question hasn't already been auto-submitted
-    if (isAutoSubmit) {
-      const sessionCheck = await db.getAsync(
-        'SELECT auto_submitted_at FROM game_sessions WHERE game_id = (SELECT game_id FROM participants WHERE id = $1) AND current_question_id = $2',
-        [participant.id, questionId]
-      );
+    // Ensure empty strings are preserved as empty strings, not converted to null
+    // For auto-submitted answers, always use empty string to prevent null constraint violations
+    // Always convert null/undefined to empty string to prevent database constraint violations
+    const finalAnswer = (answer == null || isAutoSubmit) ? '' : String(answer).trim();
+    console.log('🔍 DEBUG: Final answer after processing:', finalAnswer?.substring(0, 100) || 'empty string');
 
-      if (sessionCheck?.auto_submitted_at) {
-        console.log('🔍 DEBUG: Question already auto-submitted, rejecting duplicate auto-submit');
-        return res.status(409).json({ error: 'Question already auto-submitted' });
-      }
-      console.log('🔍 DEBUG: Auto-submit validation passed - proceeding with submission');
-    }
+
 
     // Get question details
     console.log('🔍 DEBUG: Fetching question details for ID:', questionId);
@@ -521,30 +498,30 @@ router.post('/answer', authenticateParticipant, async (req, res) => {
     const language = question.programming_language || 'javascript';
 
     if (question.question_type === 'mcq') {
-      isCorrect = answer.toLowerCase().trim() === question.correct_answer.toLowerCase().trim();
+      isCorrect = finalAnswer.toLowerCase().trim() === question.correct_answer.toLowerCase().trim();
       correctnessScore = isCorrect ? 10 : 0;
     } else if (question.question_type === 'fill_blank') {
-      isCorrect = answer.toLowerCase().trim() === question.correct_answer.toLowerCase().trim();
+      isCorrect = finalAnswer.toLowerCase().trim() === question.correct_answer.toLowerCase().trim();
       correctnessScore = isCorrect ? 10 : 0;
     } else if (question.question_type === 'image') {
       // For image-based questions, answer is typically a text description or identification
-      isCorrect = answer.toLowerCase().trim() === question.correct_answer.toLowerCase().trim();
+      isCorrect = finalAnswer.toLowerCase().trim() === question.correct_answer.toLowerCase().trim();
       correctnessScore = isCorrect ? 10 : 0;
     } else if (question.question_type === 'crossword') {
       // Validate crossword answers
-      isCorrect = evaluateCrosswordAnswer(answer, question.crossword_grid, question.crossword_clues, question.crossword_size);
+      isCorrect = evaluateCrosswordAnswer(finalAnswer, question.crossword_grid, question.crossword_clues, question.crossword_size);
       correctnessScore = isCorrect ? 10 : 0;
     } else if (question.question_type === 'code') {
       // Enhanced code question evaluation with detailed scoring
       try {
         if (evaluationMode === 'mcq') {
           // Auto-check against key
-          isCorrect = answer.toLowerCase().trim() === question.correct_answer.toLowerCase().trim();
+          isCorrect = finalAnswer.toLowerCase().trim() === question.correct_answer.toLowerCase().trim();
           correctnessScore = isCorrect ? 10 : 0;
         } else if (evaluationMode === 'semantic') {
           // AI-based semantic validation with detailed analysis
-          isCorrect = await evaluateCodeSemantic(answer, question.correct_answer, question.ai_validation_settings, language, participant.id);
-          const analysis = CodeExecutionService.analyzeCode(answer, language, question.correct_answer);
+          isCorrect = await evaluateCodeSemantic(finalAnswer, question.correct_answer, question.ai_validation_settings, language, participant.id);
+          const analysis = CodeExecutionService.analyzeCode(finalAnswer, language, question.correct_answer);
 
           correctnessScore = (analysis.structureScore + analysis.keywordScore + analysis.similarityScore) / 3;
           codeQualityScore = analysis.complexityScore;
@@ -556,7 +533,7 @@ router.post('/answer', authenticateParticipant, async (req, res) => {
           codeQualityScore = Math.min(codeQualityScore, 10);
         } else if (evaluationMode === 'compiler') {
           // Test case validation with detailed metrics
-          const testResults = await CodeExecutionService.executeTestCases(answer, language, JSON.parse(question.test_cases || '[]'), participant.id);
+          const testResults = await CodeExecutionService.executeTestCases(finalAnswer, language, JSON.parse(question.test_cases || '[]'), participant.id);
           executionResults = JSON.stringify(testResults);
 
           testCasesPassed = testResults.filter(r => r.success).length;
@@ -569,7 +546,7 @@ router.post('/answer', authenticateParticipant, async (req, res) => {
 
           correctnessScore = passRate * 10;
           performanceScore = Math.max(0, 10 - (executionTimeMs / 1000)); // Penalize slow execution
-          codeQualityScore = CodeExecutionService.calculatePartialScore(answer, question.correct_answer, testResults, language, evaluationMode);
+          codeQualityScore = CodeExecutionService.calculatePartialScore(finalAnswer, question.correct_answer, testResults, language, evaluationMode);
 
           // Ensure scores don't exceed maximum
           correctnessScore = Math.min(correctnessScore, 10);
@@ -579,7 +556,7 @@ router.post('/answer', authenticateParticipant, async (req, res) => {
           isCorrect = passRate >= 0.8; // 80% pass rate required
         } else if (evaluationMode === 'bugfix') {
           // Bug fix validation with detailed analysis
-          const validation = await CodeExecutionService.validateBugFix(question.correct_answer || '', answer, question.test_cases || '[]', participant.id);
+          const validation = await CodeExecutionService.validateBugFix(question.correct_answer || '', finalAnswer, question.test_cases || '[]', participant.id);
           executionResults = JSON.stringify(validation);
 
           correctnessScore = (validation.fixesApplied ? 5 : 0) + (validation.testsPass ? 5 : 0);
@@ -591,7 +568,7 @@ router.post('/answer', authenticateParticipant, async (req, res) => {
           isCorrect = validation.fixesApplied && validation.testsPass;
         } else {
           // Default to simple text comparison
-          isCorrect = answer.toLowerCase().includes(question.correct_answer.toLowerCase());
+          isCorrect = finalAnswer.toLowerCase().includes(question.correct_answer.toLowerCase());
           correctnessScore = isCorrect ? 10 : 0;
         }
 
@@ -604,12 +581,12 @@ router.post('/answer', authenticateParticipant, async (req, res) => {
       } catch (error) {
         console.error('Code evaluation error:', error);
         // On evaluation failure, fall back to partial scoring
-        partialScore = calculatePartialScore(answer, question.correct_answer, question.question_type, question.partial_marking_settings, question);
+        partialScore = calculatePartialScore(finalAnswer, question.correct_answer, question.question_type, question.partial_marking_settings, question);
         correctnessScore = partialScore;
         isCorrect = false;
       }
     } else {
-      isCorrect = answer.toLowerCase().trim() === question.correct_answer.toLowerCase().trim();
+      isCorrect = finalAnswer.toLowerCase().trim() === question.correct_answer.toLowerCase().trim();
       correctnessScore = isCorrect ? 10 : 0;
     }
 
@@ -675,23 +652,46 @@ router.post('/answer', authenticateParticipant, async (req, res) => {
       scoreEarned = Math.max(0, scoreEarned - question.hint_penalty);
     }
 
+    // Additional validation: Ensure finalAnswer is never null before database insertion
+    if (finalAnswer === null || finalAnswer === undefined) {
+      console.error('🔍 DEBUG: finalAnswer is null/undefined before database insertion, this should not happen');
+      return res.status(400).json({ error: 'Invalid answer format' });
+    }
+
+    // Check if auto_submitted_at column exists for backward compatibility
+    let columnExists = { exists: true }; // Default to true for newer databases
+    try {
+      columnExists = await db.getAsync(`
+        SELECT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'answers' AND column_name = 'auto_submitted_at'
+        )
+      `);
+    } catch (error) {
+      // If information_schema query fails, assume column exists
+      console.log('🔍 DEBUG: Column existence check failed, assuming auto_submitted_at exists');
+    }
+
     // Save answer with detailed scoring information and duplicate prevention
     const answerId = uuidv4();
+    let insertSql, insertParams;
+
+    // Insert answer with all required fields
+    insertSql = `INSERT INTO answers (
+      id, participant_id, question_id, answer, answer_text, is_correct, score_earned, time_taken, hint_used,
+      execution_results, partial_score, code_quality_score, performance_score, correctness_score,
+      evaluation_mode, execution_time_ms, memory_used_kb, test_cases_passed, total_test_cases,
+      time_decay_bonus, auto_submitted, auto_submitted_at
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)`;
+    insertParams = [
+      answerId, participant.id, questionId, finalAnswer, finalAnswer, isCorrect, scoreEarned, timeTaken, hintUsed,
+      executionResults, partialScore, codeQualityScore, performanceScore, correctnessScore,
+      evaluationMode, executionTimeMs, memoryUsedKb, testCasesPassed, totalTestCases,
+      timeDecayBonus, autoSubmit || false, autoSubmit ? new Date().toISOString() : null
+    ];
+
     try {
-      await db.runAsync(
-        `INSERT INTO answers (
-          id, participant_id, question_id, answer_text, is_correct, score_earned, time_taken, hint_used,
-          execution_results, partial_score, code_quality_score, performance_score, correctness_score,
-          evaluation_mode, execution_time_ms, memory_used_kb, test_cases_passed, total_test_cases,
-          time_decay_bonus, auto_submitted, auto_submitted_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)`,
-        [
-          answerId, participant.id, questionId, finalAnswer, isCorrect, scoreEarned, timeTaken, hintUsed,
-          executionResults, partialScore, codeQualityScore, performanceScore, correctnessScore,
-          evaluationMode, executionTimeMs, memoryUsedKb, testCasesPassed, totalTestCases,
-          timeDecayBonus, autoSubmit || false, autoSubmit ? new Date().toISOString() : null
-        ]
-      );
+      await db.runAsync(insertSql, insertParams);
       console.log('🔍 DEBUG: Answer saved successfully with ID:', answerId);
     } catch (insertError) {
       // Check if it's a duplicate key error (participant already answered)
@@ -700,7 +700,10 @@ router.post('/answer', authenticateParticipant, async (req, res) => {
           insertError.message?.includes('UNIQUE constraint failed') ||
           insertError.message?.includes('duplicate key value')) {
         console.log('🔍 DEBUG: Duplicate answer detected during insert, rejecting submission');
-        return res.status(409).json({ error: 'Already answered this question' });
+        return res.status(409).json({
+          error: 'Already answered this question',
+          message: 'You have already submitted an answer for this question. Only the first submission counts for scoring.'
+        });
       }
       throw insertError; // Re-throw other errors
     }
@@ -789,7 +792,10 @@ router.post('/answer', authenticateParticipant, async (req, res) => {
       res.status(400).json({ error: 'Question time has expired' });
     } else if (error.message?.includes('already answered')) {
       console.error('🔍 DEBUG: Duplicate submission attempt');
-      res.status(409).json({ error: 'You have already answered this question' });
+      res.status(409).json({
+        error: 'Already answered this question',
+        message: 'You have already submitted an answer for this question. Only the first submission counts for scoring.'
+      });
     } else {
       console.error('🔍 DEBUG: Unexpected error during submission');
       res.status(500).json({ error: 'Failed to submit answer' });

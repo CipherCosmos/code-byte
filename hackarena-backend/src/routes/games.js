@@ -308,7 +308,13 @@ router.delete('/:gameId', authenticateToken, async (req, res) => {
       [req.params.gameId]
     );
 
-    // 2. Delete answers for this game
+    // 2. Delete game sessions for this game (before deleting questions)
+    await db.runAsync(
+      'DELETE FROM game_sessions WHERE game_id = $1',
+      [req.params.gameId]
+    );
+
+    // 3. Delete answers for this game
     await db.runAsync(
       `DELETE FROM answers
        WHERE question_id IN (
@@ -317,21 +323,21 @@ router.delete('/:gameId', authenticateToken, async (req, res) => {
       [req.params.gameId]
     );
 
-    // 3. Delete participants for this game
+    // 4. Delete participants for this game
     await db.runAsync(
       'DELETE FROM participants WHERE game_id = $1',
       [req.params.gameId]
     );
 
-    // 4. Delete questions for this game
+    // 5. Nullify any remaining references to questions in game_sessions before deleting questions
     await db.runAsync(
-      'DELETE FROM questions WHERE game_id = $1',
+      'UPDATE game_sessions SET current_question_id = NULL WHERE current_question_id IN (SELECT id FROM questions WHERE game_id = $1)',
       [req.params.gameId]
     );
 
-    // 5. Delete game sessions for this game
+    // 6. Delete questions for this game
     await db.runAsync(
-      'DELETE FROM game_sessions WHERE game_id = $1',
+      'DELETE FROM questions WHERE game_id = $1',
       [req.params.gameId]
     );
 

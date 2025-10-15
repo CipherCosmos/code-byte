@@ -22,13 +22,13 @@ export class Answer {
   @JoinColumn({ name: 'question_id' })
   question: Promise<Question>;
 
-  @Column('text', { nullable: true })
-  answer_text: string;
+  @Column('text', { name: 'answer', nullable: false })
+  answer: string;
 
-  @Column('boolean', { default: false })
+  @Column('boolean', { nullable: true, default: false })
   is_correct: boolean;
 
-  @Column('int', { default: 0 })
+  @Column('int', { nullable: true, default: 0 })
   score_earned: number;
 
   @Column('int', { nullable: true })
@@ -72,6 +72,63 @@ export class Answer {
 
   @Column('timestamp', { nullable: true })
   auto_submitted_at: Date;
+
+  @Column('int', { default: 0 })
+  score: number;
+
+  @Column('int', { default: 0 })
+  hint_penalty: number;
+
+  @Column('int', { nullable: true })
+  response_time_ms: number;
+
+  @Column('int', { default: 0 })
+  base_score: number;
+
+  @Column('int', { default: 0 })
+  time_bonus: number;
+
+  @Column('int', { default: 0 })
+  streak_bonus: number;
+
+  @Column('int', { default: 0 })
+  difficulty_bonus: number;
+
+  @Column('int', { default: 0 })
+  speed_bonus: number;
+
+  @Column('int', { default: 0 })
+  first_correct_bonus: number;
+
+  @Column('int', { default: 0 })
+  partial_credit: number;
+
+  @Column('int', { default: 0 })
+  late_penalty: number;
+
+  @Column('int', { default: 0 })
+  total_bonuses: number;
+
+  @Column('int', { default: 0 })
+  total_penalties: number;
+
+  @Column('int', { default: 0 })
+  final_score: number;
+
+  @Column('jsonb', { nullable: true })
+  scoring_breakdown: any;
+
+  @Column('int', { default: 0 })
+  hints_used: number;
+
+  @Column('decimal', { precision: 5, scale: 4, default: 0 })
+  time_decay_bonus: number;
+
+  @Column('boolean', { nullable: true, default: false })
+  auto_submitted: boolean;
+
+  @Column('text', { nullable: true })
+  answer_text: string;
 
   @OneToMany(() => CodeExecutionResult, result => result.answer, { lazy: true })
   codeExecutionResults: Promise<CodeExecutionResult[]>;

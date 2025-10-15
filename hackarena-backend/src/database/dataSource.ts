@@ -8,15 +8,29 @@ import { GameSession } from '../entities/GameSession.js';
 import { CodeExecutionResult } from '../entities/CodeExecutionResult.js';
 import { SupportedLanguage } from '../entities/SupportedLanguage.js';
 import { CodeTemplate } from '../entities/CodeTemplate.js';
+import dotenv from 'dotenv';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
+
+// Load environment variables
+dotenv.config();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 export const AppDataSource = new DataSource({
   type: 'postgres',
-  host: 'pg-2e6b7563-svm-aac5.f.aivencloud.com',
-  port: 14244,
-  username: 'avnadmin',
-  password: process.env.DATABASE_PASSWORD,
-  database: 'defaultdb',
-  ssl: { rejectUnauthorized: false },
+  url: process.env.DATABASE_URL, // Use DATABASE_URL if available
+  host: process.env.DATABASE_URL ? undefined : (process.env.DATABASE_HOST || 'pg-2e6b7563-svm-aac5.f.aivencloud.com'),
+  port: process.env.DATABASE_URL ? undefined : parseInt(process.env.DATABASE_PORT || '14244'),
+  username: process.env.DATABASE_URL ? undefined : (process.env.DATABASE_USER || 'avnadmin'),
+  password: process.env.DATABASE_URL ? undefined : process.env.DATABASE_PASSWORD,
+  database: process.env.DATABASE_URL ? undefined : (process.env.DATABASE_NAME || 'defaultdb'),
+  ssl: {
+    ca: fs.readFileSync(path.join(__dirname, 'aiven-ca.pem')),
+    rejectUnauthorized: false,
+  },
   synchronize: false, // Use migrations instead
   logging: true, // Enable logging for development
   entities: [
@@ -36,7 +50,22 @@ export const AppDataSource = new DataSource({
     max: 20, // Maximum number of clients in the pool
     idleTimeoutMillis: 30000, // Close idle clients after 30 seconds
     connectionTimeoutMillis: 10000, // Increased timeout to 10 seconds for debugging
-    // Ensure all timestamps are handled in UTC
-    timezone: 'UTC',
+    timezone: 'UTC', // Ensure all timestamps are handled in UTC
   },
 });
+
+// Initialize the data source with error handling
+AppDataSource.initialize()
+  .then(() => {
+    console.log('✅ Database connected successfully');
+  })
+  .catch((error) => {
+    console.error('❌ Database connection failed:', error.message);
+    console.error('❌ Connection details:', {
+      host: process.env.DATABASE_HOST || 'pg-2e6b7563-svm-aac5.f.aivencloud.com',
+      port: process.env.DATABASE_PORT || '14244',
+      database: process.env.DATABASE_NAME || 'defaultdb',
+      ssl: process.env.DATABASE_SSL === 'true',
+    });
+    process.exit(1); // Exit the process if the database connection fails
+  });

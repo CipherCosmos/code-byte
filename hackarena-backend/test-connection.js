@@ -1,5 +1,9 @@
 import pkg from 'pg';
 const { Pool } = pkg;
+import dotenv from 'dotenv';
+
+// Load environment variables
+dotenv.config();
 
 // Create PostgreSQL connection pool using the same config as dataSource.ts
 const pool = new Pool({
