@@ -40,7 +40,7 @@ RUN npm ci --only=production && npm cache clean --force
 COPY --from=builder /app/dist ./dist
 
 # Copy migration scripts
-COPY --from=builder /app/src/database ./dist/database
+COPY --from=builder /app/src/database ./src/database
 
 # Copy environment files (optional, can be overridden)
 COPY .env.production .env
