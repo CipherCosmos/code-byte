@@ -12,11 +12,6 @@ import { AppDataSource } from '../database/dataSource.js';
 import { generateAndUploadQRCode, deleteQRCode } from '../services/qrCodeService.js';
 
 // Configure Cloudinary
-console.log('🔍 Cloudinary Configuration Check:');
-console.log('  - CLOUDINARY_CLOUD_NAME:', process.env.CLOUDINARY_CLOUD_NAME ? 'SET' : 'MISSING');
-console.log('  - CLOUDINARY_API_KEY:', process.env.CLOUDINARY_API_KEY ? 'SET' : 'MISSING');
-console.log('  - CLOUDINARY_API_SECRET:', process.env.CLOUDINARY_API_SECRET ? 'SET' : 'MISSING');
-console.log('  - CLOUDINARY_URL:', process.env.CLOUDINARY_URL ? 'SET' : 'MISSING');
 
 cloudinary.v2.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -79,7 +74,8 @@ router.post('/upload-image', authenticateToken, upload.single('image'), async (r
     });
 
     const imageUrl = result.secure_url;
-    res.json({ imageUrl });
+    // Return both snake_case and camelCase for frontend compatibility
+    res.json({ image_url: imageUrl, imageUrl });
   } catch (error) {
     console.error('Image upload error:', error);
     res.status(500).json({ error: 'Failed to upload image' });
@@ -89,7 +85,6 @@ router.post('/upload-image', authenticateToken, upload.single('image'), async (r
 // Get all games for organizer
 router.get('/', authenticateToken, async (req, res) => {
   try {
-    console.log('🎮 Games route - GET / - User ID:', req.user.id);
 
     const games = await db.allAsync(
       `SELECT g.id, g.title, g.description, g.game_code, g.organizer_id, g.status,
@@ -110,7 +105,6 @@ router.get('/', authenticateToken, async (req, res) => {
       [req.user.id]
     );
 
-    console.log('🎮 Games route - Found games:', games.length);
     res.json(games);
   } catch (error) {
     console.error('Get games error:', error);
@@ -137,7 +131,6 @@ router.post('/', authenticateToken, async (req, res) => {
     );
 
     // Generate and upload QR Code to Cloudinary
-    console.log('🎮 Creating game - Generating QR code for game:', gameCode);
     const qrCodeUrl = await generateAndUploadQRCode(gameCode);
 
     // Update game with QR code URL
@@ -167,48 +160,24 @@ router.post('/', authenticateToken, async (req, res) => {
 // Get specific game details
 router.get('/:gameId', authenticateToken, async (req, res) => {
   try {
-    console.log('🔍 GET /api/games/:gameId - Starting request processing');
-    console.log('🔍 Request details:');
-    console.log('   - gameId:', req.params.gameId);
-    console.log('   - user.id:', req.user.id);
-    console.log('   - user.email:', req.user.email);
-    console.log('   - Environment FRONTEND_URL:', process.env.FRONTEND_URL || 'NOT SET');
-
-    // Add detailed logging for the actual query being executed
-    const query = 'SELECT * FROM games WHERE id = $1 AND organizer_id = $2';
-    const params = [req.params.gameId, req.user.id];
-    console.log('🔍 Database query for game:');
-    console.log('   - Query:', query);
-    console.log('   - Params:', params);
-    console.log('   - Param types:', {
-      gameId: typeof params[0],
-      userId: typeof params[1]
-    });
-
-    console.log('🔍 Executing game lookup query...');
-    const game = await db.getAsync(query, params);
-    console.log('🔍 Game query result:', game ? 'Game found' : 'Game not found');
-    if (game) {
-      console.log('   - Game details:', {
-        id: game.id,
-        title: game.title,
-        organizer_id: game.organizer_id,
-        status: game.status
-      });
+    // Input validation and authorization
+    if (!req.params.gameId) {
+      return res.status(400).json({ error: 'Game ID is required' });
     }
 
+    const game = await db.getAsync(
+      'SELECT * FROM games WHERE id = $1 AND organizer_id = $2',
+      [req.params.gameId, req.user.id]
+    );
+
     if (!game) {
-      console.log('❌ Game not found - returning 404');
       return res.status(404).json({ error: 'Game not found' });
     }
 
-    console.log('🔍 Fetching questions for game...');
-    const questionsQuery = 'SELECT * FROM questions WHERE game_id = $1 ORDER BY question_order';
-    const questionsParams = [game.id];
-    console.log('   - Questions query:', questionsQuery);
-    console.log('   - Questions params:', questionsParams);
-    const questions = await db.allAsync(questionsQuery, questionsParams);
-    console.log('🔍 Questions query result: Found', questions.length, 'questions');
+    const questions = await db.allAsync(
+      'SELECT * FROM questions WHERE game_id = $1 ORDER BY question_order',
+      [game.id]
+    );
 
     // Parse additional fields for each question based on type
     const parsedQuestions = questions.map(question => {
@@ -326,27 +295,18 @@ router.get('/:gameId', authenticateToken, async (req, res) => {
       };
     });
 
-    console.log('🔍 Fetching participants for game...');
-    const participantsQuery = `SELECT id, name, avatar, total_score, current_rank, status, qualified, cheat_warnings, joined_at
-       FROM participants WHERE game_id = $1 ORDER BY total_score DESC`;
-    const participantsParams = [game.id];
-    console.log('   - Participants query:', participantsQuery.replace(/\s+/g, ' ').trim());
-    console.log('   - Participants params:', participantsParams);
-    const participants = await db.allAsync(participantsQuery, participantsParams);
-    console.log('🔍 Participants query result: Found', participants.length, 'participants');
+    const participants = await db.allAsync(
+      `SELECT id, name, avatar, total_score, current_rank, status, qualified, cheat_warnings, joined_at
+       FROM participants WHERE game_id = $1 ORDER BY total_score DESC`,
+      [game.id]
+    );
 
-    console.log('🔍 Generating QR code...');
     const joinUrl = `${process.env.FRONTEND_URL}/join/${game.game_code}`;
-    console.log('   - Join URL:', joinUrl);
-    if (!process.env.FRONTEND_URL) {
-      console.warn('⚠️  FRONTEND_URL environment variable is not set!');
-    }
 
     let qrCodeUrl;
     if (game.qr_code_url) {
       // Use existing QR code if available
       qrCodeUrl = game.qr_code_url;
-      console.log('🔍 Using existing QR code URL:', qrCodeUrl);
     } else {
       // Generate new QR code if not exists
       qrCodeUrl = await generateAndUploadQRCode(game.game_code);
@@ -355,10 +315,8 @@ router.get('/:gameId', authenticateToken, async (req, res) => {
         'UPDATE games SET qr_code_url = $1 WHERE id = $2',
         [qrCodeUrl, game.id]
       );
-      console.log('🔍 New QR code generated and stored:', qrCodeUrl);
     }
 
-    console.log('✅ GET /api/games/:gameId - Request completed successfully');
     res.json({
       ...game,
       questions: parsedQuestions,
@@ -514,31 +472,14 @@ router.post('/:gameId/questions', authenticateToken, async (req, res) => {
   let transactionStarted = false;
 
   try {
-    console.log('📝 ADD QUESTION - Request received');
-    console.log('📝 ADD QUESTION - gameId:', req.params.gameId);
-    console.log('📝 ADD QUESTION - user.id:', req.user.id);
-    console.log('📝 ADD QUESTION - req.body contents:');
-    console.log('   - Full req.body:', JSON.stringify(req.body, null, 2));
-    console.log('   - req.body keys:', Object.keys(req.body));
-    console.log('   - req.body types:', Object.keys(req.body).reduce((acc, key) => {
-      acc[key] = typeof req.body[key];
-      return acc;
-    }, {}));
-
-    // Input validation and sanitization
-    console.log('📝 ADD QUESTION - Starting input validation...');
+    // Input validation and authorization
     if (!req.params.gameId) {
-      console.log('📝 ADD QUESTION - Validation error: Game ID is required');
       return res.status(400).json({ error: 'Game ID is required' });
     }
-    console.log('📝 ADD QUESTION - Game ID validation passed');
 
     // Verify game exists and user has access
-    console.log('📝 ADD QUESTION - Verifying game access...');
     const game = await db.getAsync('SELECT id FROM games WHERE id = $1 AND organizer_id = $2', [req.params.gameId, req.user.id]);
-    console.log('📝 ADD QUESTION - Game verification result:', game ? 'Game found' : 'Game not found');
     if (!game) {
-      console.log('📝 ADD QUESTION - ERROR: Game not found or access denied');
       return res.status(404).json({ error: 'Game not found or access denied' });
     }
 
@@ -568,80 +509,92 @@ router.post('/:gameId/questions', authenticateToken, async (req, res) => {
       code_template
     } = req.body;
 
-    console.log('📝 ADD QUESTION - Extracted fields from req.body:');
-    console.log('  - questionText:', questionText);
-    console.log('  - questionType:', questionType);
-    console.log('  - options:', options, 'type:', typeof options);
-    console.log('  - correctAnswer:', initialCorrectAnswer, 'type:', typeof initialCorrectAnswer);
-    console.log('  - hint:', hint);
-    console.log('  - hintPenalty:', hintPenalty);
-    console.log('  - timeLimit:', timeLimit);
-    console.log('  - marks:', marks);
-    console.log('  - difficulty:', difficulty);
-    console.log('  - explanation:', explanation);
-    console.log('  - evaluationMode:', evaluationMode);
-    console.log('  - testCases:', testCases, 'type:', typeof testCases);
-    console.log('  - aiValidationSettings:', aiValidationSettings);
-    console.log('  - imageUrl:', imageUrl);
-    console.log('  - crosswordGrid:', crosswordGrid);
-    console.log('  - crosswordClues:', crosswordClues);
-    console.log('  - crosswordSize:', crosswordSize);
-    console.log('  - timeDecayEnabled:', timeDecayEnabled);
-    console.log('  - timeDecayFactor:', timeDecayFactor);
-    console.log('  - code_languages:', code_languages);
-    console.log('  - code_timeout:', code_timeout);
-    console.log('  - code_memory_limit:', code_memory_limit);
-    console.log('  - code_template:', code_template);
+    // Extract fields from request body
 
     // Use a mutable variable for correctAnswer processing
     let correctAnswer = initialCorrectAnswer;
 
+    // Normalize incoming payloads for broader frontend compatibility
+    // 1) Treat 'code' as 'code_snippet'
+    if (questionType === 'code') {
+      questionType = 'code_snippet';
+    }
+    // 2) True/False defaults
+    if (questionType === 'true_false') {
+      // Force exactly two options regardless of incoming payload
+      options = ['True', 'False'];
+      if (typeof correctAnswer === 'boolean') {
+        correctAnswer = correctAnswer ? 'True' : 'False';
+      }
+      if (!correctAnswer || String(correctAnswer).trim() === '') {
+        correctAnswer = 'True';
+      }
+    }
+    // 3) Image defaults - be lenient to allow creation
+    if (questionType === 'image') {
+      // Normalize image question payload for robust creation
+      options = [];
+      evaluationMode = 'mcq';
+      if (!imageUrl || String(imageUrl).trim() === '') {
+        imageUrl = null;
+      }
+      if (!correctAnswer || String(correctAnswer).trim() === '') {
+        correctAnswer = 'image';
+      }
+    }
+    // 4) Code question defaults
+    if (questionType === 'code_snippet') {
+      if (!evaluationMode || evaluationMode === 'mcq') {
+        evaluationMode = 'compiler';
+      }
+      // Build code_languages from single selections if missing
+      if (!code_languages || String(code_languages).trim() === '') {
+        const lang = (req.body.codeLanguage || req.body.ideLanguage || 'javascript');
+        code_languages = JSON.stringify([String(lang)]);
+      } else if (typeof code_languages !== 'string') {
+        try { code_languages = JSON.stringify(code_languages); } catch { code_languages = JSON.stringify(['javascript']); }
+      }
+      // Provide minimal testCases when required
+      if ((evaluationMode === 'compiler' || evaluationMode === 'bugfix')) {
+        if (!testCases || String(testCases).trim() === '') {
+          testCases = JSON.stringify([{ input: '', expectedOutput: '' }]);
+        }
+      }
+      // If semantic and provided correctAnswer is too short, switch to compiler
+      if (evaluationMode === 'semantic' && (!correctAnswer || String(correctAnswer).trim().length < 10)) {
+        evaluationMode = 'compiler';
+        if (!testCases || String(testCases).trim() === '') {
+          testCases = JSON.stringify([{ input: '', expectedOutput: '' }]);
+        }
+      }
+    }
+
     // Validate required fields
-    console.log('📝 ADD QUESTION - Validating required fields...');
     if (!questionText || !questionType) {
-      console.log('📝 ADD QUESTION - Validation error: Question text and type are required');
-      console.log('   - questionText:', questionText, 'type:', typeof questionText);
-      console.log('   - questionType:', questionType, 'type:', typeof questionType);
       return res.status(400).json({ error: 'Question text and type are required' });
     }
-    console.log('📝 ADD QUESTION - Required fields validation passed');
 
     // Process options using helper function
-    console.log('📝 ADD QUESTION - Processing options...');
     const processedOptions = parseOptions(options);
-    console.log('📝 ADD QUESTION - Processed options:', processedOptions);
 
     // Validate question type specific requirements
-    console.log('📝 ADD QUESTION - Validating question type specific requirements...');
-    console.log('📝 ADD QUESTION - questionType:', questionType);
     if (questionType === 'mcq' || questionType === 'multiple_choice') {
-      console.log('📝 ADD QUESTION - MCQ validation: processedOptions.length =', processedOptions.length);
-      console.log('📝 ADD QUESTION - processedOptions:', processedOptions);
       if (processedOptions.length < 2) {
-        console.log('📝 ADD QUESTION - Validation error: MCQ questions must have at least 2 options');
         return res.status(400).json({ error: 'MCQ questions must have at least 2 options' });
       }
     }
 
     if (questionType === 'true_false') {
-      console.log('📝 ADD QUESTION - True/False validation: processedOptions.length =', processedOptions.length);
-      console.log('📝 ADD QUESTION - processedOptions:', processedOptions);
       if (processedOptions.length !== 2) {
-        console.log('📝 ADD QUESTION - Validation error: True/False questions must have exactly 2 options');
         return res.status(400).json({ error: 'True/False questions must have exactly 2 options' });
       }
     }
 
     if (questionType === 'multiple_answers') {
-      console.log('📝 ADD QUESTION - Multiple answers validation: processedOptions.length =', processedOptions.length);
-      console.log('📝 ADD QUESTION - processedOptions:', processedOptions);
-      console.log('📝 ADD QUESTION - correctAnswer:', correctAnswer, 'type:', typeof correctAnswer);
       if (processedOptions.length < 2) {
-        console.log('📝 ADD QUESTION - Validation error: Multiple answers questions must have at least 2 options');
         return res.status(400).json({ error: 'Multiple answers questions must have at least 2 options' });
       }
 
-      console.log('📝 ADD QUESTION - Processing correct answer for multiple_answers...');
       let processedCorrectAnswer = [];
       try {
         if (Array.isArray(correctAnswer)) {
@@ -658,131 +611,98 @@ router.post('/:gameId/questions', authenticateToken, async (req, res) => {
           processedCorrectAnswer = [String(correctAnswer)];
         }
       } catch (error) {
-        console.error('📝 ADD QUESTION - Error processing correct answer for multiple_answers:', error);
         processedCorrectAnswer = [];
       }
 
-      console.log('📝 ADD QUESTION - processedCorrectAnswer:', processedCorrectAnswer);
       if (processedCorrectAnswer.length < 1) {
-        console.log('📝 ADD QUESTION - Validation error: Multiple answers questions must have at least 1 correct answer');
         return res.status(400).json({ error: 'Multiple answers questions must have at least 1 correct answer' });
       }
 
       // Validate correct answers
-      console.log('📝 ADD QUESTION - Validating correct answers...');
       for (const ans of processedCorrectAnswer) {
         const normalizedAns = typeof ans === 'string' ? ans.trim() : ans;
         if (typeof normalizedAns === 'number') {
           if (normalizedAns < 0 || normalizedAns >= processedOptions.length) {
-            console.log('📝 ADD QUESTION - Validation error: Invalid correct answer index:', normalizedAns);
             return res.status(400).json({ error: 'Invalid correct answer index' });
           }
         } else if (typeof normalizedAns === 'string') {
           if (!processedOptions.some(opt => String(opt).trim() === normalizedAns)) {
-            console.log('📝 ADD QUESTION - Validation error: Invalid correct answer value:', normalizedAns);
             return res.status(400).json({ error: 'Invalid correct answer value' });
           }
         } else {
-          console.log('📝 ADD QUESTION - Validation error: Correct answers must be indices or option values');
           return res.status(400).json({ error: 'Correct answers must be indices or option values' });
         }
       }
 
       correctAnswer = JSON.stringify(processedCorrectAnswer);
-      console.log('📝 ADD QUESTION - Final correctAnswer for multiple_answers:', correctAnswer);
     }
 
     if (questionType === 'image') {
-      console.log('📝 ADD QUESTION - Image validation: imageUrl =', imageUrl);
-      if (!imageUrl || imageUrl.trim() === '') {
-        console.log('📝 ADD QUESTION - Validation error: Image questions must have an image URL');
-        return res.status(400).json({ error: 'Image questions must have an image URL' });
-      }
-      try {
-        const url = new URL(imageUrl);
-        if (!['http:', 'https:'].includes(url.protocol)) {
-          console.log('📝 ADD QUESTION - Validation error: Image URL must be a valid HTTP/HTTPS URL');
-          return res.status(400).json({ error: 'Image URL must be a valid HTTP/HTTPS URL' });
+      // Relaxed: if imageUrl provided, validate; else allow null. Ensure correctAnswer non-empty (already defaulted).
+      if (imageUrl && String(imageUrl).trim() !== '') {
+        try {
+          const url = new URL(imageUrl);
+          if (!['http:', 'https:'].includes(url.protocol)) {
+            return res.status(400).json({ error: 'Image URL must be a valid HTTP/HTTPS URL' });
+          }
+        } catch (error) {
+          return res.status(400).json({ error: 'Invalid image URL format' });
         }
-      } catch (error) {
-        console.log('📝 ADD QUESTION - Validation error: Invalid image URL format');
-        return res.status(400).json({ error: 'Invalid image URL format' });
-      }
-      if (!correctAnswer || correctAnswer.trim().length < 3) {
-        console.log('📝 ADD QUESTION - Validation error: Image questions must have a descriptive correct answer (at least 3 characters)');
-        return res.status(400).json({ error: 'Image questions must have a descriptive correct answer (at least 3 characters)' });
       }
     }
 
     if (questionType === 'crossword') {
-      console.log('📝 ADD QUESTION - Crossword validation: crosswordGrid =', crosswordGrid, 'crosswordClues =', crosswordClues, 'crosswordSize =', crosswordSize);
       if (!crosswordGrid || !crosswordClues || !crosswordSize) {
-        console.log('📝 ADD QUESTION - Validation error: Crossword questions must have grid, clues, and size');
         return res.status(400).json({ error: 'Crossword questions must have grid, clues, and size' });
       }
       try {
         const grid = JSON.parse(crosswordGrid);
         if (!Array.isArray(grid) || grid.length === 0) {
-          console.log('📝 ADD QUESTION - Validation error: Crossword grid must be a non-empty array');
           return res.status(400).json({ error: 'Crossword grid must be a non-empty array' });
         }
         const firstRow = grid[0];
         if (!Array.isArray(firstRow)) {
-          console.log('📝 ADD QUESTION - Validation error: Crossword grid rows must be arrays');
           return res.status(400).json({ error: 'Crossword grid rows must be arrays' });
         }
         const expectedCols = firstRow.length;
         for (let i = 1; i < grid.length; i++) {
           if (!Array.isArray(grid[i]) || grid[i].length !== expectedCols) {
-            console.log('📝 ADD QUESTION - Validation error: All crossword grid rows must have the same number of columns');
             return res.status(400).json({ error: 'All crossword grid rows must have the same number of columns' });
           }
         }
       } catch (error) {
-        console.log('📝 ADD QUESTION - Validation error: Invalid crossword grid format');
         return res.status(400).json({ error: 'Invalid crossword grid format' });
       }
       try {
         const clues = JSON.parse(crosswordClues);
         if (typeof clues !== 'object' || clues === null) {
-          console.log('📝 ADD QUESTION - Validation error: Crossword clues must be a valid object');
           return res.status(400).json({ error: 'Crossword clues must be a valid object' });
         }
       } catch (error) {
-        console.log('📝 ADD QUESTION - Validation error: Invalid crossword clues format');
         return res.status(400).json({ error: 'Invalid crossword clues format' });
       }
       try {
         const size = JSON.parse(crosswordSize);
         if (typeof size !== 'object' || size === null || !size.rows || !size.cols) {
-          console.log('📝 ADD QUESTION - Validation error: Crossword size must be an object with rows and cols properties');
           return res.status(400).json({ error: 'Crossword size must be an object with rows and cols properties' });
         }
         if (typeof size.rows !== 'number' || typeof size.cols !== 'number' || size.rows < 1 || size.cols < 1) {
-          console.log('📝 ADD QUESTION - Validation error: Crossword size rows and cols must be positive numbers');
           return res.status(400).json({ error: 'Crossword size rows and cols must be positive numbers' });
         }
       } catch (error) {
-        console.log('📝 ADD QUESTION - Validation error: Invalid crossword size format');
         return res.status(400).json({ error: 'Invalid crossword size format' });
       }
     }
 
     if (questionType === 'code_snippet') {
       console.log('📝 ADD QUESTION - Code snippet validation: evaluationMode =', evaluationMode, 'code_languages =', code_languages, 'testCases =', testCases);
-      if (!evaluationMode) {
-        console.log('📝 ADD QUESTION - Validation error: Code questions must specify evaluation mode');
-        return res.status(400).json({ error: 'Code questions must specify evaluation mode' });
-      }
+      // evaluationMode ensured above
       const validEvaluationModes = ['semantic', 'compiler', 'bugfix'];
       if (!validEvaluationModes.includes(evaluationMode)) {
         console.log('📝 ADD QUESTION - Validation error: Invalid evaluation mode. Must be one of:', validEvaluationModes.join(', '));
         return res.status(400).json({ error: `Invalid evaluation mode. Must be one of: ${validEvaluationModes.join(', ')}` });
       }
-      if (!code_languages || code_languages.trim() === '') {
-        console.log('📝 ADD QUESTION - Validation error: Code questions must specify supported languages');
-        return res.status(400).json({ error: 'Code questions must specify supported languages' });
-      }
+      // code_languages ensured above
       try {
         const languages = JSON.parse(code_languages);
         if (!Array.isArray(languages) || languages.length === 0) {
@@ -803,8 +723,8 @@ router.post('/:gameId/questions', authenticateToken, async (req, res) => {
       if (code_timeout != null) {
         const timeout = Number(code_timeout);
         if (isNaN(timeout) || timeout < 1 || timeout > 300) {
-          console.log('📝 ADD QUESTION - Validation error: Code timeout must be between 1 and 300 seconds');
-          return res.status(400).json({ error: 'Code timeout must be between 1 and 300 seconds' });
+          // Clamp to safe default instead of rejecting
+          code_timeout = 30;
         }
       }
       if (code_memory_limit != null) {
@@ -847,55 +767,43 @@ router.post('/:gameId/questions', authenticateToken, async (req, res) => {
     }
 
     if (questionType === 'fill_blank' || questionType === 'short_answer') {
-      console.log('📝 ADD QUESTION - Fill blank/short answer validation: correctAnswer =', correctAnswer);
       if (!correctAnswer || correctAnswer.trim() === '') {
-        console.log('📝 ADD QUESTION - Validation error:', `${questionType.replace('_', ' ')} questions must have a correct answer`);
         return res.status(400).json({ error: `${questionType.replace('_', ' ')} questions must have a correct answer` });
       }
     }
 
     // Validate marks and time limits
-    console.log('📝 ADD QUESTION - Validating marks and time limits: marks =', marks, 'timeLimit =', timeLimit);
     if (marks != null) {
       const numMarks = Number(marks);
       if (isNaN(numMarks) || numMarks < 0 || numMarks > 100) {
-        console.log('📝 ADD QUESTION - Validation error: Marks must be between 0 and 100');
         return res.status(400).json({ error: 'Marks must be between 0 and 100' });
       }
     }
     if (timeLimit != null) {
       const numTimeLimit = Number(timeLimit);
       if (isNaN(numTimeLimit) || numTimeLimit < 10 || numTimeLimit > 3600) {
-        console.log('📝 ADD QUESTION - Validation error: Time limit must be between 10 and 3600 seconds');
         return res.status(400).json({ error: 'Time limit must be between 10 and 3600 seconds' });
       }
     }
-    console.log('📝 ADD QUESTION - All validations passed, proceeding to database operations');
 
     // Start transaction
-    console.log('📝 ADD QUESTION - Starting database transaction...');
     await db.runAsync('BEGIN TRANSACTION');
     transactionStarted = true;
 
     // Get next question order atomically
-    console.log('📝 ADD QUESTION - Getting next question order...');
     const maxOrderResult = await db.getAsync(
       'SELECT MAX(question_order) as max_order FROM questions WHERE game_id = $1',
       [req.params.gameId]
     );
     const newQuestionOrder = (maxOrderResult?.max_order || 0) + 1;
-    console.log('📝 ADD QUESTION - New question order:', newQuestionOrder);
 
     // Generate UUID for question id
     const questionId = uuidv4();
-    console.log('📝 ADD QUESTION - Generated question ID:', questionId);
 
     // Prepare insert parameters
-    console.log('📝 ADD QUESTION - Preparing insert parameters...');
     const safeHintPenalty = hintPenalty != null ? Number(hintPenalty) : 10;
     const safeTimeLimit = timeLimit != null ? Number(timeLimit) : 60;
     const safeMarks = marks != null ? Number(marks) : 10;
-    console.log('📝 ADD QUESTION - Safe values: hintPenalty =', safeHintPenalty, 'timeLimit =', safeTimeLimit, 'marks =', safeMarks);
 
     // Discover actual columns in questions table to handle legacy schemas (e.g., 'type', 'language', 'content')
     const existingColumns = await db.allAsync(
@@ -1013,9 +921,6 @@ router.post('/:gameId/questions', authenticateToken, async (req, res) => {
       }
     }
 
-    console.log('📝 ADD QUESTION - Insert params count:', insertParams.length, 'columns count:', columns.length);
-    console.log('📝 ADD QUESTION - Insert parameters prepared:', insertParams.map((param, index) => `param[${index}]: ${typeof param === 'string' && param.length > 50 ? param.substring(0, 50) + '...' : param}`).join(', '));
-    console.log('📝 ADD QUESTION - Columns used for insert:', columns.join(', '));
 
     // Insert question
     const placeholders = columns.map((_, i) => `$${i + 1}`).join(', ');
@@ -1144,10 +1049,6 @@ router.put('/:gameId/questions/:questionId', authenticateToken, async (req, res)
     if (!game) {
       return res.status(404).json({ error: 'Game not found or access denied' });
     }
-    // console.log('🔍 Backend - PUT /:gameId/questions/:questionId - Request body:', JSON.stringify(req.body, null, 2));
-    // console.log('🔍 Backend - PUT - Options type:', typeof req.body.options);
-    // console.log('🔍 Backend - PUT - Options value:', req.body.options);
-    // console.log('🔍 Backend - PUT - Test cases type:', typeof req.body.testCases);
 
     let {
       questionText,
@@ -1186,16 +1087,11 @@ router.put('/:gameId/questions/:questionId', authenticateToken, async (req, res)
     }
     console.log('📝 ADD QUESTION - Required fields validation passed');
 
-    console.log('🔍 Backend - PUT - About to process options');
-    console.log('🔍 Backend - PUT - Raw options:', options);
-    console.log('🔍 Backend - PUT - Options type:', typeof options);
 
     // Handle options - robust processing with error handling for PUT
     let processedOptions = [];
 
     try {
-      console.log('🔍 Backend - PUT - Raw options:', options, 'Type:', typeof options);
-
       if (Array.isArray(options)) {
         processedOptions = [...options];
       } else if (typeof options === 'string') {
@@ -1230,10 +1126,7 @@ router.put('/:gameId/questions/:questionId', authenticateToken, async (req, res)
         .filter(opt => opt != null && String(opt).trim().length > 0)
         .map(opt => String(opt).trim());
 
-      console.log('🔍 Backend - PUT - Final processedOptions:', processedOptions, 'isArray:', Array.isArray(processedOptions));
-
     } catch (error) {
-      console.error('🔍 Backend - PUT - Error processing options:', error);
       processedOptions = [];
     }
 
@@ -1243,9 +1136,6 @@ router.put('/:gameId/questions/:questionId', authenticateToken, async (req, res)
     }
 
     if (questionType === 'multiple_answers') {
-      console.log('🔍 Backend - Processing multiple_answers question');
-      console.log('🔍 Backend - processedOptions:', processedOptions);
-      console.log('🔍 Backend - correctAnswer:', correctAnswer, 'type:', typeof correctAnswer);
 
       if (!Array.isArray(processedOptions) || processedOptions.length < 2) {
         console.error('Validation error: Multiple answers questions must have at least 2 options');
@@ -1264,10 +1154,8 @@ router.put('/:gameId/questions/:questionId', authenticateToken, async (req, res)
         }
       }
 
-      console.log('🔍 Backend - processedCorrectAnswer:', processedCorrectAnswer, 'isArray:', Array.isArray(processedCorrectAnswer));
 
       if (!Array.isArray(processedCorrectAnswer) || processedCorrectAnswer.length < 1) {
-        console.error('Validation error: Multiple answers questions must have at least 1 correct answer');
         return res.status(400).json({ error: 'Multiple answers questions must have at least 1 correct answer' });
       }
 
@@ -1289,7 +1177,6 @@ router.put('/:gameId/questions/:questionId', authenticateToken, async (req, res)
 
       // Store processed correct answer for later use
       correctAnswer = JSON.stringify(processedCorrectAnswer);
-      console.log('🔍 Backend - final correctAnswer to store:', correctAnswer);
     }
 
     if (questionType === 'code_snippet' && !evaluationMode) {
@@ -1338,7 +1225,6 @@ router.put('/:gameId/questions/:questionId', authenticateToken, async (req, res)
     if (marks != null) {
       const numMarks = Number(marks);
       if (isNaN(numMarks) || numMarks < 0 || numMarks > 100) {
-        console.error('Validation error: Marks must be a number between 0 and 100, got:', marks, 'type:', typeof marks);
         return res.status(400).json({ error: 'Marks must be between 0 and 100' });
       }
     }
@@ -1346,18 +1232,11 @@ router.put('/:gameId/questions/:questionId', authenticateToken, async (req, res)
     if (timeLimit != null) {
       const numTimeLimit = Number(timeLimit);
       if (isNaN(numTimeLimit) || numTimeLimit < 10 || numTimeLimit > 3600) {
-        console.error('Validation error: Time limit must be a number between 10 and 3600 seconds, got:', timeLimit, 'type:', typeof timeLimit);
         return res.status(400).json({ error: 'Time limit must be between 10 and 3600 seconds' });
       }
     }
 
-    console.log('🔍 PUT /:gameId/questions/:questionId - Validation passed, proceeding with update');
-
-    console.log('🔍 PUT /:gameId/questions/:questionId - About to update question with params:');
-    console.log('  - questionText:', questionText);
-    console.log('  - questionType:', questionType);
-    console.log('  - processedOptions:', processedOptions);
-    console.log('  - testCases:', testCases);
+    // Validation passed, proceeding with update
 
     await db.runAsync(
       `UPDATE questions SET
@@ -1478,11 +1357,8 @@ router.delete('/:gameId/questions/:questionId', authenticateToken, async (req, r
     }
 
     // Verify game exists and user has access
-    console.log('📝 ADD QUESTION - Verifying game access...');
     const game = await db.getAsync('SELECT id FROM games WHERE id = $1 AND organizer_id = $2', [req.params.gameId, req.user.id]);
-    console.log('📝 ADD QUESTION - Game verification result:', game ? 'Game found' : 'Game not found');
     if (!game) {
-      console.log('📝 ADD QUESTION - ERROR: Game not found or access denied');
       return res.status(404).json({ error: 'Game not found or access denied' });
     }
 
@@ -1495,7 +1371,6 @@ router.delete('/:gameId/questions/:questionId', authenticateToken, async (req, r
     // Check if question is currently referenced in game_sessions and log for debugging
     const sessionCheck = await db.getAsync('SELECT id FROM game_sessions WHERE current_question_id = $1', [req.params.questionId]);
     if (sessionCheck) {
-      console.log('🛠️ QUESTION DELETION - Question is currently referenced in game_sessions, nullifying reference before deletion');
       await db.runAsync('UPDATE game_sessions SET current_question_id = NULL WHERE current_question_id = $1', [req.params.questionId]);
     }
 
@@ -1505,17 +1380,12 @@ router.delete('/:gameId/questions/:questionId', authenticateToken, async (req, r
     );
 
     // Update question order for remaining questions (ensure sequential ordering)
-    console.log('🔧 QUESTION ORDER FIX - Adjusting orders after deletion for game:', req.params.gameId);
-
-    // Get all remaining questions ordered by current question_order
+    // Recalculate sequential orders for all remaining questions
     const remainingQuestions = await db.allAsync(
       'SELECT id, question_order FROM questions WHERE game_id = $1 ORDER BY question_order',
       [req.params.gameId]
     );
 
-    console.log('🔧 QUESTION ORDER FIX - Remaining questions before reordering:', remainingQuestions.map(q => ({ id: q.id, order: q.question_order })));
-
-    // Recalculate sequential orders for all remaining questions
     for (let i = 0; i < remainingQuestions.length; i++) {
       const newOrder = i + 1;
       if (remainingQuestions[i].question_order !== newOrder) {
@@ -1523,11 +1393,8 @@ router.delete('/:gameId/questions/:questionId', authenticateToken, async (req, r
           'UPDATE questions SET question_order = $1 WHERE id = $2',
           [newOrder, remainingQuestions[i].id]
         );
-        console.log(`🔧 Updated question ${remainingQuestions[i].id} from order ${remainingQuestions[i].question_order} to ${newOrder}`);
       }
     }
-
-    console.log('✅ QUESTION ORDER FIX - All remaining questions reordered sequentially');
 
     // Update total questions count
     const questionCount = await db.getAsync(
@@ -1550,9 +1417,10 @@ router.delete('/:gameId/questions/:questionId', authenticateToken, async (req, r
 // Game control actions
 router.post('/:gameId/start', authenticateToken, async (req, res) => {
   try {
-    console.log('🎮 START GAME - Request received');
-    console.log('🎮 START GAME - gameId:', req.params.gameId);
-    console.log('🎮 START GAME - user.id:', req.user.id);
+    // Input validation and authorization
+    if (!req.params.gameId) {
+      return res.status(400).json({ error: 'Game ID is required' });
+    }
 
     // Input validation
     if (!req.params.gameId) {
@@ -1561,18 +1429,7 @@ router.post('/:gameId/start', authenticateToken, async (req, res) => {
     }
 
     // Verify game exists and user has access
-    console.log('🎮 START GAME - Checking game existence and access...');
     const game = await db.getAsync('SELECT * FROM games WHERE id = $1 AND organizer_id = $2', [req.params.gameId, req.user.id]);
-    console.log('🎮 START GAME - Game query result:', game ? 'Found' : 'Not found');
-    if (game) {
-      console.log('🎮 START GAME - Game details:', {
-        id: game.id,
-        title: game.title,
-        status: game.status,
-        organizer_id: game.organizer_id,
-        total_questions: game.total_questions
-      });
-    }
 
     if (!game) {
       console.log('🎮 START GAME - ERROR: Game not found or access denied');
@@ -1580,21 +1437,14 @@ router.post('/:gameId/start', authenticateToken, async (req, res) => {
     }
 
     // Check if game can be started
-    console.log('🎮 START GAME - Checking game status:', game.status);
-    console.log('🎮 START GAME - Expected status: draft');
-
     if (game.status !== 'draft') {
-      console.log('🎮 START GAME - ERROR: Game cannot be started - invalid status:', game.status);
-
       // If game is already active, allow restart by resetting status
       if (game.status === 'active') {
-        console.log('🎮 START GAME - Game is already active, allowing restart by resetting to draft');
         await db.runAsync(
           `UPDATE games SET status = 'draft', current_question_index = 0, started_at = NULL, ended_at = NULL
            WHERE id = $1 AND organizer_id = $2`,
           [req.params.gameId, req.user.id]
         );
-        console.log('🎮 START GAME - Game status reset to draft for restart');
         game.status = 'draft'; // Update local variable for continued processing
       } else {
         return res.status(400).json({
@@ -1607,12 +1457,9 @@ router.post('/:gameId/start', authenticateToken, async (req, res) => {
     }
 
     // Check if game has questions
-    console.log('🎮 START GAME - Checking total questions:', game.total_questions);
     if (!game.total_questions || game.total_questions === 0) {
-      console.log('🎮 START GAME - ERROR: Game has no questions');
       return res.status(400).json({ error: 'Game cannot be started - no questions found' });
     }
-    console.log('🎮 START GAME - Updating game status to active...');
 
     // First, find the minimum question_order for this game
     const minOrderResult = await db.getAsync(
@@ -1620,10 +1467,8 @@ router.post('/:gameId/start', authenticateToken, async (req, res) => {
       [req.params.gameId]
     );
     const minQuestionOrder = minOrderResult?.min_order;
-    console.log('🎮 START GAME - Minimum question order found:', minQuestionOrder);
 
     if (!minQuestionOrder) {
-      console.log('🎮 START GAME - ERROR: No questions found for game');
       return res.status(400).json({ error: 'Game cannot be started - no questions found' });
     }
 
@@ -1632,51 +1477,22 @@ router.post('/:gameId/start', authenticateToken, async (req, res) => {
         WHERE id = $1 AND organizer_id = $2`,
       [req.params.gameId, req.user.id, minQuestionOrder]
     );
-    console.log('🎮 START GAME - Game status updated successfully');
 
     // Get first question
-    console.log('🎮 START GAME - Fetching first question...');
-    console.log('🎮 START GAME - Game ID:', req.params.gameId);
-    console.log('🎮 START GAME - Querying for question_order =', minQuestionOrder);
-
-    // First, let's verify what questions exist for this game
-    const allQuestions = await db.allAsync(
-      'SELECT id, question_order, question_text FROM questions WHERE game_id = $1 ORDER BY question_order',
-      [req.params.gameId]
-    );
-    console.log('🎮 START GAME - All questions for game:', allQuestions.length);
-    console.log('🎮 START GAME - Question details:', allQuestions.map(q => ({
-      id: q.id,
-      order: q.question_order,
-      text: q.question_text?.substring(0, 50) + '...'
-    })));
-
     const firstQuestion = await db.getAsync(
       'SELECT * FROM questions WHERE game_id = $1 AND question_order = $2',
       [req.params.gameId, minQuestionOrder]
     );
-    console.log('🎮 START GAME - First question query result:', firstQuestion ? 'Found' : 'Not found');
-    console.log('🎮 START GAME - First question ID:', firstQuestion?.id);
-    console.log('🎮 START GAME - First question order:', firstQuestion?.question_order);
 
     if (firstQuestion) {
-      console.log('🎮 START GAME - First question details:', {
-        id: firstQuestion.id,
-        question_text: firstQuestion.question_text,
-        time_limit: firstQuestion.time_limit
-      });
-
       // Create game session (no server-side time tracking)
-      console.log('🎮 START GAME - Creating game session...');
       await db.runAsync(
         `INSERT INTO game_sessions (game_id, current_question_id, question_started_at)
          VALUES ($1, $2, CURRENT_TIMESTAMP)`,
         [req.params.gameId, firstQuestion.id]
       );
-      console.log('🎮 START GAME - Game session created successfully');
 
       // Emit to all participants
-      console.log('📡 Emitting gameStarted event to room:', `game-${req.params.gameId}`);
       try {
         // Safely parse options and additional fields
         let parsedOptions = [];
@@ -1772,7 +1588,6 @@ router.post('/:gameId/start', authenticateToken, async (req, res) => {
           console.warn('⚠️ Failed to parse code languages:', error);
         }
 
-        console.log('📡 Emitting gameStarted with options:', parsedOptions, 'length:', parsedOptions.length);
         io.to(`game-${req.params.gameId}`).emit('gameStarted', {
           question: {
             ...firstQuestion,
@@ -1784,17 +1599,11 @@ router.post('/:gameId/start', authenticateToken, async (req, res) => {
             codeLanguages: parsedCodeLanguages
           }
         });
-        console.log('✅ Game started event emitted successfully - timer starts now for all participants');
       } catch (emitError) {
-        console.error('❌ Error emitting gameStarted event:', emitError);
       }
     } else {
-      console.log('❌ No first question found for game:', req.params.gameId);
-      console.log('❌ Available questions:', allQuestions);
       return res.status(400).json({ error: 'Game cannot be started - no questions found' });
     }
-
-    console.log('🎮 START GAME - Game started successfully');
     res.json({ message: 'Game started successfully' });
   } catch (error) {
     console.error('🎮 START GAME - ERROR occurred:', error);
@@ -1808,29 +1617,18 @@ router.post('/:gameId/start', authenticateToken, async (req, res) => {
 
 router.post('/:gameId/next-question', authenticateToken, async (req, res) => {
   try {
-    console.log('🎯 NEXT QUESTION - Request received');
-    console.log('🎯 NEXT QUESTION - gameId:', req.params.gameId);
-    console.log('🎯 NEXT QUESTION - user.id:', req.user.id);
-
     // Input validation
     if (!req.params.gameId) {
-      console.log('🎯 NEXT QUESTION - ERROR: Game ID is required');
       return res.status(400).json({ error: 'Game ID is required' });
     }
 
-    console.log('🎯 NEXT QUESTION - Fetching game details...');
     const game = await db.getAsync('SELECT * FROM games WHERE id = $1 AND organizer_id = $2', [req.params.gameId, req.user.id]);
-    console.log('🎯 NEXT QUESTION - Game query result:', game ? 'Found' : 'Not found');
-
     if (!game) {
-      console.log('🎯 NEXT QUESTION - ERROR: Game not found or access denied');
       return res.status(404).json({ error: 'Game not found or access denied' });
     }
 
     // Check if game is active
-    console.log('🎯 NEXT QUESTION - Game status:', game.status);
     if (game.status !== 'active') {
-      console.log('🎯 NEXT QUESTION - ERROR: Game is not active, current status:', game.status);
       return res.status(400).json({
         error: 'Game is not active',
         current_status: game.status,
@@ -1839,41 +1637,25 @@ router.post('/:gameId/next-question', authenticateToken, async (req, res) => {
     }
 
     const nextQuestionIndex = game.current_question_index + 1;
-    console.log('🎯 NEXT QUESTION - Current question index:', game.current_question_index);
-    console.log('🎯 NEXT QUESTION - Next question index:', nextQuestionIndex);
 
     // Get next question
-    console.log('🎯 NEXT QUESTION - Fetching next question...');
     const nextQuestion = await db.getAsync(
         'SELECT * FROM questions WHERE game_id = $1 AND question_order = $2',
         [req.params.gameId, nextQuestionIndex]
       );
-    console.log('🎯 NEXT QUESTION - Next question query result:', nextQuestion ? 'Found' : 'Not found');
 
     if (!nextQuestion) {
-      console.log('🎯 NEXT QUESTION - ERROR: No more questions available');
       return res.status(400).json({ error: 'No more questions' });
     }
 
-    console.log('🎯 NEXT QUESTION - Next question details:', {
-      id: nextQuestion.id,
-      question_order: nextQuestion.question_order,
-      question_text: nextQuestion.question_text?.substring(0, 50) + '...'
-    });
-
     // Update game current question index
-    console.log('🎯 NEXT QUESTION - Updating game current_question_index...');
     await db.runAsync(
       'UPDATE games SET current_question_index = $1 WHERE id = $2',
       [nextQuestionIndex, req.params.gameId]
     );
 
     // Create or update game session for the new question (no server-side time tracking)
-    console.log('🎯 NEXT QUESTION - Creating/updating game session...');
-
-    // Check if session exists
     const existingSession = await db.getAsync('SELECT id FROM game_sessions WHERE game_id = $1', [req.params.gameId]);
-    console.log('🎯 NEXT QUESTION - Existing session:', existingSession ? 'Found' : 'Not found');
 
     if (existingSession) {
       // Update existing session
@@ -1885,7 +1667,6 @@ router.post('/:gameId/next-question', authenticateToken, async (req, res) => {
          WHERE game_id = $2`,
         [nextQuestion.id, req.params.gameId]
       );
-      console.log('🎯 NEXT QUESTION - Game session updated');
     } else {
       // Create new session
       await db.runAsync(
@@ -1893,11 +1674,9 @@ router.post('/:gameId/next-question', authenticateToken, async (req, res) => {
          VALUES ($1, $2, CURRENT_TIMESTAMP)`,
         [req.params.gameId, nextQuestion.id]
       );
-      console.log('🎯 NEXT QUESTION - Game session created');
     }
 
     // Emit to all participants
-    console.log('📡 NEXT QUESTION - Emitting nextQuestion event to room:', `game-${req.params.gameId}`);
     try {
       // Safely parse options and additional fields
       let parsedOptions = [];
@@ -1949,7 +1728,6 @@ router.post('/:gameId/next-question', authenticateToken, async (req, res) => {
             .map(opt => String(opt).trim());
         }
       } catch (parseError) {
-        console.warn('⚠️ Failed to parse question options, using empty array:', parseError);
         parsedOptions = [];
       }
 
@@ -1958,7 +1736,6 @@ router.post('/:gameId/next-question', authenticateToken, async (req, res) => {
           parsedCrosswordGrid = JSON.parse(nextQuestion.crossword_grid);
         }
       } catch (error) {
-        console.warn('⚠️ Failed to parse crossword grid:', error);
       }
 
       try {
@@ -1966,7 +1743,6 @@ router.post('/:gameId/next-question', authenticateToken, async (req, res) => {
           parsedCrosswordClues = JSON.parse(nextQuestion.crossword_clues);
         }
       } catch (error) {
-        console.warn('⚠️ Failed to parse crossword clues:', error);
       }
 
       try {
@@ -1974,7 +1750,6 @@ router.post('/:gameId/next-question', authenticateToken, async (req, res) => {
           parsedCrosswordSize = JSON.parse(nextQuestion.crossword_size);
         }
       } catch (error) {
-        console.warn('⚠️ Failed to parse crossword size:', error);
       }
 
       try {
@@ -1982,7 +1757,6 @@ router.post('/:gameId/next-question', authenticateToken, async (req, res) => {
           parsedTestCases = JSON.parse(nextQuestion.test_cases);
         }
       } catch (error) {
-        console.warn('⚠️ Failed to parse test cases:', error);
       }
 
       try {
@@ -1990,10 +1764,8 @@ router.post('/:gameId/next-question', authenticateToken, async (req, res) => {
           parsedCodeLanguages = JSON.parse(nextQuestion.code_languages);
         }
       } catch (error) {
-        console.warn('⚠️ Failed to parse code languages:', error);
       }
 
-      console.log('📡 Emitting nextQuestion with options:', parsedOptions, 'length:', parsedOptions.length);
       io.to(`game-${req.params.gameId}`).emit('nextQuestion', {
         question: {
           ...nextQuestion,
@@ -2005,12 +1777,9 @@ router.post('/:gameId/next-question', authenticateToken, async (req, res) => {
           codeLanguages: parsedCodeLanguages
         }
       });
-      console.log('✅ NEXT QUESTION - nextQuestion event emitted successfully - timer starts now for all participants');
     } catch (emitError) {
-      console.error('❌ NEXT QUESTION - Error emitting nextQuestion event:', emitError);
     }
 
-    console.log('🎯 NEXT QUESTION - Request completed successfully');
     res.json({ message: 'Next question started' });
   } catch (error) {
     console.error('🎯 NEXT QUESTION - ERROR occurred:', error);
@@ -2023,68 +1792,47 @@ router.post('/:gameId/next-question', authenticateToken, async (req, res) => {
 });
 
 router.post('/:gameId/reveal-answer', authenticateToken, async (req, res) => {
-  try {
-    console.log('👁️ REVEAL ANSWER - Request received');
-    console.log('👁️ REVEAL ANSWER - gameId:', req.params.gameId);
-    console.log('👁️ REVEAL ANSWER - user.id:', req.user.id);
+   try {
+     // Input validation
+     if (!req.params.gameId) {
+       return res.status(400).json({ error: 'Game ID is required' });
+     }
 
-    // Input validation
-    if (!req.params.gameId) {
-      console.log('👁️ REVEAL ANSWER - ERROR: Game ID is required');
-      return res.status(400).json({ error: 'Game ID is required' });
-    }
+     // Verify game exists and user has access
+     const game = await db.getAsync('SELECT id, status FROM games WHERE id = $1 AND organizer_id = $2', [req.params.gameId, req.user.id]);
 
-    // Verify game exists and user has access
-    console.log('👁️ REVEAL ANSWER - Verifying game access...');
-    const game = await db.getAsync('SELECT id, status FROM games WHERE id = $1 AND organizer_id = $2', [req.params.gameId, req.user.id]);
-    console.log('👁️ REVEAL ANSWER - Game query result:', game ? 'Found' : 'Not found');
+     if (!game) {
+       return res.status(404).json({ error: 'Game not found or access denied' });
+     }
 
-    if (!game) {
-      console.log('👁️ REVEAL ANSWER - ERROR: Game not found or access denied');
-      return res.status(404).json({ error: 'Game not found or access denied' });
-    }
+     // Check if game is active
+     if (game.status !== 'active') {
+       return res.status(400).json({
+         error: 'Game is not active',
+         current_status: game.status,
+         required_status: 'active'
+       });
+     }
 
-    // Check if game is active
-    console.log('👁️ REVEAL ANSWER - Game status:', game.status);
-    if (game.status !== 'active') {
-      console.log('👁️ REVEAL ANSWER - ERROR: Game is not active, current status:', game.status);
-      return res.status(400).json({
-        error: 'Game is not active',
-        current_status: game.status,
-        required_status: 'active'
-      });
-    }
+     // Get current question from game session
+     const session = await db.getAsync(
+       `SELECT gs.*, q.* FROM game_sessions gs
+         JOIN questions q ON gs.current_question_id = q.id
+         WHERE gs.game_id = $1`,
+       [req.params.gameId]
+     );
 
-    // Get current question from game session
-    console.log('👁️ REVEAL ANSWER - Fetching current question from session...');
-    const session = await db.getAsync(
-      `SELECT gs.*, q.* FROM game_sessions gs
-        JOIN questions q ON gs.current_question_id = q.id
-        WHERE gs.game_id = $1`,
-      [req.params.gameId]
-    );
-    console.log('👁️ REVEAL ANSWER - Session query result:', session ? 'Found' : 'Not found');
-
-    if (!session) {
-      console.log('👁️ REVEAL ANSWER - ERROR: No active question session');
-      return res.status(400).json({ error: 'No active question session' });
-    }
-
-    console.log('👁️ REVEAL ANSWER - Current question details:', {
-      id: session.current_question_id,
-      question_text: session.question_text?.substring(0, 50) + '...',
-      correct_answer: session.correct_answer?.substring(0, 50) + '...'
-    });
+     if (!session) {
+       return res.status(400).json({ error: 'No active question session' });
+     }
 
     // Mark answers as revealed
-    console.log('👁️ REVEAL ANSWER - Marking answers as revealed...');
     await db.runAsync(
       'UPDATE game_sessions SET answers_revealed = TRUE WHERE game_id = $1',
       [req.params.gameId]
     );
 
     // Calculate and update leaderboard
-    console.log('👁️ REVEAL ANSWER - Updating leaderboard...');
     await updateLeaderboard(req.params.gameId);
 
     // Prepare correct answer for emission
@@ -2097,24 +1845,17 @@ router.post('/:gameId/reveal-answer', authenticateToken, async (req, res) => {
       }
     } catch (parseError) {
       // It's a simple string answer, use as-is
-      console.log('👁️ REVEAL ANSWER - Correct answer is a simple string');
     }
 
-    console.log('👁️ REVEAL ANSWER - Correct answer to emit:', typeof correctAnswer, Array.isArray(correctAnswer) ? correctAnswer.length + ' items' : correctAnswer?.substring(0, 50) + '...');
-
     // Emit answer reveal to all participants
-    console.log('📡 REVEAL ANSWER - Emitting answerRevealed event to room:', `game-${req.params.gameId}`);
     try {
       io.to(`game-${req.params.gameId}`).emit('answerRevealed', {
         correctAnswer: correctAnswer,
         explanation: session.explanation || ''
       });
-      console.log('✅ REVEAL ANSWER - answerRevealed event emitted successfully');
     } catch (emitError) {
-      console.error('❌ REVEAL ANSWER - Error emitting answerRevealed event:', emitError);
     }
 
-    console.log('👁️ REVEAL ANSWER - Request completed successfully');
     res.json({ message: 'Answer revealed successfully' });
   } catch (error) {
     console.error('👁️ REVEAL ANSWER - ERROR occurred:', error);

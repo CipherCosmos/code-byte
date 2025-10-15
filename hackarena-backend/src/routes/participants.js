@@ -376,7 +376,6 @@ router.post('/answer', authenticateParticipant, async (req, res) => {
 
       for (const pattern of dangerousPatterns) {
         if (pattern.test(answer)) {
-          console.warn('Potentially dangerous code detected from participant:', req.participant?.id);
           // Log security event but don't block - sandboxing will handle it
         }
       }
@@ -384,27 +383,20 @@ router.post('/answer', authenticateParticipant, async (req, res) => {
     const participant = req.participant;
 
     // Validate required fields - allow null answer for auto-submitted responses
-    console.log('🔍 DEBUG: Validating required fields...');
     const isAutoSubmit = autoSubmit === true || autoSubmit === 'true';
     if (!questionId || (!isAutoSubmit && answer == null) || hintUsed === undefined || timeTaken === undefined) {
-      console.log('🔍 DEBUG: Missing required fields:', { questionId, answer, hintUsed, timeTaken, isAutoSubmit });
       return res.status(400).json({
         error: 'Missing required fields: questionId, answer (unless auto-submitted), hintUsed, timeTaken are all required'
       });
     }
 
-    console.log('🔍 DEBUG: Required fields validation passed');
-
     // Check if already answered - prevent duplicate submissions
-    console.log('🔍 DEBUG: Checking for existing answer...');
     const existingAnswer = await db.getAsync(
       'SELECT id, is_correct, score_earned FROM answers WHERE participant_id = $1 AND question_id = $2',
       [participant.id, questionId]
     );
 
-    console.log('🔍 DEBUG: Existing answer check result:', !!existingAnswer);
     if (existingAnswer) {
-      console.log('🔍 DEBUG: Participant already answered, rejecting submission');
       return res.status(409).json({
         error: 'Already answered this question',
         message: 'You have already submitted an answer for this question. Only the first submission counts for scoring.'
@@ -415,23 +407,18 @@ router.post('/answer', authenticateParticipant, async (req, res) => {
     // For auto-submitted answers, always use empty string to prevent null constraint violations
     // Always convert null/undefined to empty string to prevent database constraint violations
     const finalAnswer = (answer == null || isAutoSubmit) ? '' : String(answer).trim();
-    console.log('🔍 DEBUG: Final answer after processing:', finalAnswer?.substring(0, 100) || 'empty string');
 
 
 
     // Get question details
-    console.log('🔍 DEBUG: Fetching question details for ID:', questionId);
     const question = await db.getAsync(
       'SELECT * FROM questions WHERE id = $1',
       [questionId]
     );
 
-    console.log('🔍 DEBUG: Question fetch result:', !!question);
     if (!question) {
-      console.log('🔍 DEBUG: Question not found, rejecting submission');
       return res.status(404).json({ error: 'Question not found' });
     }
-    console.log('🔍 DEBUG: Question details:', { id: question.id, type: question.question_type, evaluation_mode: question.evaluation_mode });
 
     // Verify question is still active (no server-side time checking)
     const session = await db.getAsync(
@@ -565,15 +552,6 @@ router.post('/answer', authenticateParticipant, async (req, res) => {
           const normalizedTime = timeTaken / question.time_limit;
           timeDecayBonus = 50 * Math.exp(-decayFactor * normalizedTime); // Up to 50 points for time decay
           scoreEarned = correctnessScore + timeDecayBonus;
-          console.log('⏰ Time decay calculation:', {
-            timeTaken,
-            timeLimit: question.time_limit,
-            normalizedTime,
-            decayFactor,
-            timeDecayBonus,
-            baseScore: correctnessScore,
-            finalScore: scoreEarned
-          });
         } else {
           scoreEarned = correctnessScore + 50; // Full time bonus if no decay
           timeDecayBonus = 50;
@@ -582,18 +560,12 @@ router.post('/answer', authenticateParticipant, async (req, res) => {
         // Time limit exceeded - only base points if correct
         scoreEarned = correctnessScore;
         timeDecayBonus = 0;
-        console.log('⏰ Time limit exceeded:', {
-          timeTaken,
-          timeLimit: question.time_limit,
-          scoreEarned: correctnessScore
-        });
       }
     } else if (autoSubmit) {
       // Auto-submitted answers get no points and are marked incorrect
       scoreEarned = 0;
       isCorrect = false; // Override correctness for auto-submitted answers
       timeDecayBonus = 0;
-      console.log('⏰ Auto-submit: No points awarded, answer marked incorrect');
     } else {
       // Incorrect answers get no points
       scoreEarned = 0;
@@ -606,12 +578,10 @@ router.post('/answer', authenticateParticipant, async (req, res) => {
     // Hint penalty: 10 points deduction
     if (hintUsed) {
       scoreEarned = Math.max(0, scoreEarned - 10);
-      console.log('💡 Hint used: 10 points deducted, new score:', scoreEarned);
     }
 
     // Additional validation: Ensure finalAnswer is never null before database insertion
     if (finalAnswer === null || finalAnswer === undefined) {
-      console.error('🔍 DEBUG: finalAnswer is null/undefined before database insertion, this should not happen');
       return res.status(400).json({ error: 'Invalid answer format' });
     }
 
@@ -626,7 +596,6 @@ router.post('/answer', authenticateParticipant, async (req, res) => {
       `);
     } catch (error) {
       // If information_schema query fails, assume column exists
-      console.log('🔍 DEBUG: Column existence check failed, assuming auto_submitted_at exists');
     }
 
     // Save answer with detailed scoring information and duplicate prevention
@@ -649,14 +618,12 @@ router.post('/answer', authenticateParticipant, async (req, res) => {
 
     try {
       await db.runAsync(insertSql, insertParams);
-      console.log('🔍 DEBUG: Answer saved successfully with ID:', answerId);
     } catch (insertError) {
       // Check if it's a duplicate key error (participant already answered)
       if (insertError.code === 'SQLITE_CONSTRAINT_UNIQUE' ||
           insertError.code === '23505' || // PostgreSQL unique violation
           insertError.message?.includes('UNIQUE constraint failed') ||
           insertError.message?.includes('duplicate key value')) {
-        console.log('🔍 DEBUG: Duplicate answer detected during insert, rejecting submission');
         return res.status(409).json({
           error: 'Already answered this question',
           message: 'You have already submitted an answer for this question. Only the first submission counts for scoring.'
@@ -666,7 +633,6 @@ router.post('/answer', authenticateParticipant, async (req, res) => {
     }
 
     // Update participant total score and session answered count in a transaction
-    console.log('🔍 DEBUG: Updating participant total score by:', scoreEarned);
     const dbConnection = db.getConnection ? db.getConnection() : db;
     const inTransaction = dbConnection && typeof dbConnection.runAsync === 'function';
 
@@ -681,7 +647,6 @@ router.post('/answer', authenticateParticipant, async (req, res) => {
         'UPDATE participants SET total_score = total_score + $1 WHERE id = $2',
         [scoreEarned, participant.id]
       );
-      console.log('🔍 DEBUG: Participant score updated successfully');
 
       // Update session answered count only if not auto-submitted (to prevent double counting)
       if (!isAutoSubmit) {
@@ -689,21 +654,17 @@ router.post('/answer', authenticateParticipant, async (req, res) => {
           'UPDATE game_sessions SET answered_participants = answered_participants + 1 WHERE current_question_id = $1',
           [questionId]
         );
-        console.log('🔍 DEBUG: Session answered count updated successfully');
       } else {
-        console.log('🔍 DEBUG: Skipping session answered count update for auto-submit');
       }
 
       if (inTransaction) {
         await dbConnection.runAsync('COMMIT');
       }
     } catch (dbError) {
-      console.error('🔍 DEBUG: Database update error:', dbError);
       if (inTransaction) {
         try {
           await dbConnection.runAsync('ROLLBACK');
         } catch (rollbackError) {
-          console.error('🔍 DEBUG: Rollback failed:', rollbackError);
         }
       }
       throw dbError;
@@ -736,25 +697,17 @@ router.post('/answer', authenticateParticipant, async (req, res) => {
         : (isCorrect ? 'Correct answer!' : (partialScore > 0 ? 'Partial credit awarded!' : 'Incorrect answer'))
     });
   } catch (error) {
-    console.error('🔍 DEBUG: Submit answer error:', error);
-    console.error('🔍 DEBUG: Error stack:', error.stack);
-    console.error('🔍 DEBUG: Error message:', error.message);
-
     // Provide more specific error messages based on error type
     if (error.code === 'SQLITE_CONSTRAINT' || error.message?.includes('constraint')) {
-      console.error('🔍 DEBUG: Database constraint violation');
       res.status(409).json({ error: 'Answer submission conflict - please try again' });
     } else if (error.message?.includes('time') || error.message?.includes('expired')) {
-      console.error('🔍 DEBUG: Time-related error');
       res.status(400).json({ error: 'Question time has expired' });
     } else if (error.message?.includes('already answered')) {
-      console.error('🔍 DEBUG: Duplicate submission attempt');
       res.status(409).json({
         error: 'Already answered this question',
         message: 'You have already submitted an answer for this question. Only the first submission counts for scoring.'
       });
     } else {
-      console.error('🔍 DEBUG: Unexpected error during submission');
       res.status(500).json({ error: 'Failed to submit answer' });
     }
   }

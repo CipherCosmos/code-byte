@@ -20,8 +20,6 @@ const pool = new Pool({
 
 async function migrateConstraints() {
   try {
-    console.log('Starting constraints migration...');
-
     const client = await pool.connect();
     try {
       // Ensure NOT NULL constraints for required fields in questions table
@@ -41,24 +39,18 @@ async function migrateConstraints() {
 
         try {
           await client.query(alterQuery);
-          console.log(`✅ Ensured ${field} is NOT NULL`);
         } catch (error) {
-          console.log(`NOT NULL constraint for ${field} already exists or failed:`, error.message);
         }
       }
-
-      console.log('Constraints migration completed successfully');
 
     } finally {
       client.release();
     }
 
   } catch (error) {
-    console.error('❌ Migration failed:', error.message);
     process.exit(1);
   } finally {
     await pool.end();
-    console.log('Connection pool closed.');
   }
 }
 

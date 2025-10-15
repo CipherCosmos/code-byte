@@ -8,52 +8,32 @@ const router = express.Router();
 // Get overall game analytics
 router.get('/games/:gameId/overview', authenticateToken, async (req, res) => {
   try {
-    console.log('📊 ANALYTICS OVERVIEW - Request received');
-    console.log('📊 ANALYTICS OVERVIEW - gameId:', req.params.gameId);
-    console.log('📊 ANALYTICS OVERVIEW - user.id:', req.user.id);
-
-    console.log('📊 ANALYTICS OVERVIEW - Fetching game details...');
     const game = await db.getAsync(
       'SELECT * FROM games WHERE id = $1 AND organizer_id = $2',
       [req.params.gameId, req.user.id]
     );
-    console.log('📊 ANALYTICS OVERVIEW - Game query result:', game ? 'Found' : 'Not found');
 
     if (!game) {
-      console.log('📊 ANALYTICS OVERVIEW - ERROR: Game not found');
       return res.status(404).json({ error: 'Game not found' });
     }
 
-    console.log('📊 ANALYTICS OVERVIEW - Game status:', game.status);
-    console.log('📊 ANALYTICS OVERVIEW - Game details:', {
-      id: game.id,
-      title: game.title,
-      total_questions: game.total_questions
-    });
-
     // Get participant statistics
-    console.log('📊 ANALYTICS OVERVIEW - Fetching participants...');
     const participants = await db.allAsync(
       'SELECT * FROM participants WHERE game_id = $1 AND status = $2',
       [req.params.gameId, 'active']
     );
-    console.log('📊 ANALYTICS OVERVIEW - Participants found:', participants.length);
 
     // Get qualification statistics
     const qualifiedCount = participants.filter(p => p.qualified).length;
     const qualificationRate = participants.length > 0 ? (qualifiedCount / participants.length) * 100 : 0;
-    console.log('📊 ANALYTICS OVERVIEW - Qualification stats:', { qualifiedCount, total: participants.length, rate: qualificationRate });
 
     // Get question statistics
-    console.log('📊 ANALYTICS OVERVIEW - Fetching questions...');
     const questions = await db.allAsync(
       'SELECT * FROM questions WHERE game_id = $1 ORDER BY question_order',
       [req.params.gameId]
     );
-    console.log('📊 ANALYTICS OVERVIEW - Questions found:', questions.length);
 
     // Get answer statistics
-    console.log('📊 ANALYTICS OVERVIEW - Fetching answers...');
     const answers = await db.allAsync(
       `SELECT a.*, q.question_text, q.marks, q.time_limit
         FROM answers a
@@ -61,7 +41,6 @@ router.get('/games/:gameId/overview', authenticateToken, async (req, res) => {
         WHERE q.game_id = $1`,
       [req.params.gameId]
     );
-    console.log('📊 ANALYTICS OVERVIEW - Answers found:', answers.length);
 
     // Calculate overall statistics
     const totalParticipants = participants.length;
@@ -70,21 +49,18 @@ router.get('/games/:gameId/overview', authenticateToken, async (req, res) => {
     const correctAnswers = answers.filter(a => a.is_correct).length;
     const overallAccuracy = totalAnswers > 0 ? (correctAnswers / totalAnswers) * 100 : 0;
 
-    console.log('📊 ANALYTICS OVERVIEW - Overall stats:', {
-      totalParticipants,
-      totalQuestions,
-      totalAnswers,
-      correctAnswers,
-      overallAccuracy
-    });
+    // Calculate overall statistics
+    const totalParticipants = participants.length;
+    const totalQuestions = questions.length;
+    const totalAnswers = answers.length;
+    const correctAnswers = answers.filter(a => a.is_correct).length;
+    const overallAccuracy = totalAnswers > 0 ? (correctAnswers / totalAnswers) * 100 : 0;
 
     // Average completion time
     const answeredQuestions = answers.length;
     const averageTime = answeredQuestions > 0
       ? answers.reduce((sum, a) => sum + a.time_taken, 0) / answeredQuestions
       : 0;
-
-    console.log('📊 ANALYTICS OVERVIEW - Average completion time:', averageTime);
 
     // Score distribution
     const scoreDistribution = participants.reduce((acc, p) => {
@@ -93,7 +69,12 @@ router.get('/games/:gameId/overview', authenticateToken, async (req, res) => {
       return acc;
     }, {});
 
-    console.log('📊 ANALYTICS OVERVIEW - Score distribution:', scoreDistribution);
+    // Score distribution
+    const scoreDistribution = participants.reduce((acc, p) => {
+      const range = Math.floor(p.total_score / 50) * 50;
+      acc[range] = (acc[range] || 0) + 1;
+      return acc;
+    }, {});
 
     // Game duration
     let gameDuration = null;

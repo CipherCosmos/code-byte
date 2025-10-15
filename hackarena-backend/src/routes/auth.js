@@ -8,7 +8,6 @@ import { authenticateToken } from '../middleware/auth.js';
 
 // Validate JWT_SECRET is available (optional for debugging)
 if (!process.env.JWT_SECRET) {
-  console.warn('⚠️ JWT_SECRET environment variable is not set - using default for debugging');
   process.env.JWT_SECRET = 'debug-jwt-secret-key-for-development-only';
 }
 
@@ -16,7 +15,6 @@ const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 // Validate Google Client ID is available (optional for debugging)
 if (!process.env.GOOGLE_CLIENT_ID) {
-  console.warn('⚠️ GOOGLE_CLIENT_ID environment variable is not set - Google authentication will be disabled');
 }
 
 const router = express.Router();
@@ -25,7 +23,6 @@ const router = express.Router();
 router.post('/register', async (req, res) => {
   try {
     const { email, password, name } = req.body;
-    console.log('Registration attempt:', { email, name });
 
     if (!email || !password || !name) {
       return res.status(400).json({ error: 'All fields are required' });
@@ -34,9 +31,7 @@ router.post('/register', async (req, res) => {
     const userRepository = AppDataSource.getRepository(User);
 
     // Check if user exists
-    console.log('🔍 Registration - Checking if user exists for email:', email);
     const existingUser = await userRepository.findOne({ where: { email } });
-    console.log('🔍 Registration - Existing user check result:', existingUser ? 'User exists' : 'User does not exist');
     if (existingUser) {
       return res.status(400).json({ error: 'User already exists' });
     }
@@ -45,7 +40,6 @@ router.post('/register', async (req, res) => {
     const hashedPassword = await bcrypt.hash(password, 12);
 
     // Create user
-    console.log('Inserting user with password column:', { email, hashedPassword, name });
     const user = userRepository.create({
       email,
       password: hashedPassword,
@@ -54,13 +48,11 @@ router.post('/register', async (req, res) => {
     const savedUser = await userRepository.save(user);
 
     // Generate JWT
-    console.log('🔑 Generating JWT for userId:', savedUser.id, 'email:', email);
     const token = jwt.sign(
       { userId: savedUser.id, email },
       process.env.JWT_SECRET,
       { expiresIn: '24h' }
     );
-    console.log('✅ JWT generated successfully, token length:', token.length);
 
     res.status(201).json({
       message: 'User created successfully',
@@ -72,7 +64,6 @@ router.post('/register', async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Registration error:', error);
     res.status(500).json({ error: 'Registration failed' });
   }
 });
@@ -89,9 +80,7 @@ router.post('/login', async (req, res) => {
     const userRepository = AppDataSource.getRepository(User);
 
     // Find user
-    console.log('🔍 Login - Querying database for email:', email);
     const user = await userRepository.findOne({ where: { email } });
-    console.log('🔍 Login - Database query result:', user ? 'User found' : 'User not found');
     if (!user) {
       return res.status(400).json({ error: 'Invalid credentials' });
     }
@@ -103,13 +92,11 @@ router.post('/login', async (req, res) => {
     }
 
     // Generate JWT
-    console.log('🔑 Generating JWT for login, userId:', user.id, 'email:', user.email);
     const token = jwt.sign(
       { userId: user.id, email: user.email },
       process.env.JWT_SECRET,
       { expiresIn: '24h' }
     );
-    console.log('✅ Login JWT generated successfully, token length:', token.length);
 
     res.json({
       message: 'Login successful',
@@ -121,7 +108,6 @@ router.post('/login', async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Login error:', error);
     res.status(500).json({ error: 'Login failed' });
   }
 });
@@ -178,13 +164,11 @@ router.post('/google', async (req, res) => {
 
     // Generate JWT token for session management
     // Same token format as traditional login for consistent API usage
-    console.log('🔑 Generating JWT for Google auth, userId:', user.id, 'email:', user.email);
     const token = jwt.sign(
       { userId: user.id, email: user.email },
       process.env.JWT_SECRET,
       { expiresIn: '24h' }
     );
-    console.log('✅ Google JWT generated successfully, token length:', token.length);
 
     res.json({
       message: 'Google authentication successful',
@@ -196,7 +180,6 @@ router.post('/google', async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Google authentication error:', error);
     res.status(500).json({ error: 'Google authentication failed' });
   }
 });
