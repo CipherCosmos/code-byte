@@ -2,13 +2,10 @@ import { db } from '../database/init.js';
 
 export function setupSocketHandlers(io) {
   io.on('connection', (socket) => {
-    console.log('User connected:', socket.id);
-
     // Join game room
     socket.on('joinGameRoom', async (data) => {
       try {
         const { gameCode, participantId, role } = data;
-        console.log('🏠 Socket joinGameRoom event received:', data);
 
         if (role === 'organizer') {
           const game = await db.getAsync(
@@ -19,7 +16,6 @@ export function setupSocketHandlers(io) {
           if (game) {
             socket.join(`game-${game.id}`);
             socket.join(`organizer-${game.id}`);
-            console.log(`👑 Organizer joined game room: game-${game.id}`);
           }
         } else if (role === 'participant' && participantId) {
           const participant = await db.getAsync(
@@ -38,9 +34,6 @@ export function setupSocketHandlers(io) {
             socket.participantId = participantId;
             socket.gameId = participant.game_id;
 
-            console.log(`👤 Participant ${participant.name} joined game room: game-${participant.game_id}`);
-            console.log(`🔗 Socket ID: ${socket.id}, Participant ID: ${participantId}`);
-
             // Emit participant count update to organizers
             const participantCount = await db.getAsync(
               'SELECT COUNT(*) as count FROM participants WHERE game_id = $1 AND status = $2',
@@ -51,7 +44,6 @@ export function setupSocketHandlers(io) {
               count: participantCount.count
             });
           } else {
-            console.log('❌ Participant not found for ID:', participantId);
           }
         } else if (role === 'viewer') {
           const game = await db.getAsync(
@@ -61,7 +53,6 @@ export function setupSocketHandlers(io) {
 
           if (game) {
             socket.join(`game-${game.id}`);
-            console.log(`👀 Viewer joined game room: game-${game.id}`);
           }
         }
       } catch (error) {
@@ -142,8 +133,6 @@ export function setupSocketHandlers(io) {
           penalty: finalPenalty,
           message: getCheatMessage(newWarningCount)
         });
-
-        console.log(`Cheat detected for participant ${participant.name}: ${type}, warnings: ${newWarningCount}`);
 
       } catch (error) {
         console.error('Cheat detection error:', error);
@@ -245,8 +234,6 @@ export function setupSocketHandlers(io) {
 
         io.to(`organizer-${gameId}`).emit('participantsUpdate', participants);
 
-        console.log(`Participant ${participant.name} re-admitted to game ${gameId}`);
-
       } catch (error) {
         console.error('Re-admit participant error:', error);
       }
@@ -256,8 +243,6 @@ export function setupSocketHandlers(io) {
     socket.on('questionTimeExpired', async (data) => {
       try {
         const { gameId, questionId } = data;
-
-        console.log('⏰ Server received questionTimeExpired event for game:', gameId, 'question:', questionId);
 
         // Validate input data
         if (!gameId || !questionId) {
@@ -272,11 +257,8 @@ export function setupSocketHandlers(io) {
         );
 
         if (session?.auto_submitted_at) {
-          console.log('⏰ Auto-submit already processed for question:', questionId, 'at:', session.auto_submitted_at);
           return;
         }
-
-        console.log('⏰ DEBUG: Auto-submit validation - session check passed, proceeding with auto-submission');
 
         // Get question details to determine time limit
         const question = await db.getAsync('SELECT * FROM questions WHERE id = $1', [questionId]);
@@ -287,7 +269,6 @@ export function setupSocketHandlers(io) {
 
         // Get current UTC timestamp for consistent time tracking
         const currentTimeUTC = new Date().toISOString();
-        console.log('⏰ Auto-submit triggered at UTC time:', currentTimeUTC);
 
         // Auto-submit blank answers for participants who haven't manually submitted answers
         const unansweredParticipants = await db.allAsync(
@@ -298,8 +279,6 @@ export function setupSocketHandlers(io) {
             )`,
           [gameId, questionId]
         );
-
-        console.log('⏰ Unanswered participants count:', unansweredParticipants.length);
 
         if (unansweredParticipants.length > 0) {
           // Mark auto-submit as processed to prevent duplicates
@@ -319,8 +298,6 @@ export function setupSocketHandlers(io) {
             // For auto-submitted answers, always 0 points and incorrect
             scoreEarned = 0;
             isCorrect = false;
-
-            console.log('⏰ Auto-submitting for participant:', participant.id, 'time taken:', timeTaken);
 
             await db.runAsync(
               'INSERT INTO answers (participant_id, question_id, answer, answer_text, is_correct, score_earned, time_taken, time_decay_bonus, auto_submitted, auto_submitted_at, submitted_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)',
@@ -342,7 +319,6 @@ export function setupSocketHandlers(io) {
         }
 
         // Emit time expired to all participants with synchronized timestamp
-        console.log('⏰ Emitting questionTimeExpired to all participants in game:', gameId);
         io.to(`game-${gameId}`).emit('questionTimeExpired', {
           timestamp: currentTimeUTC,
           autoSubmittedCount: unansweredParticipants.length
@@ -371,7 +347,6 @@ export function setupSocketHandlers(io) {
         );
 
         if (session && session.current_question_id) {
-          console.log('🔍 Executing liveAnalytics query for question_id:', session.current_question_id);
           const questionAnalytics = await db.getAsync(
             `SELECT
                q.question_text,
@@ -386,7 +361,6 @@ export function setupSocketHandlers(io) {
              GROUP BY q.id`,
             [session.current_question_id]
           );
-          console.log('🔍 LiveAnalytics query result:', questionAnalytics);
 
           socket.emit('liveAnalytics', {
             currentQuestion: questionAnalytics,
@@ -402,8 +376,6 @@ export function setupSocketHandlers(io) {
 
     // Handle disconnection
     socket.on('disconnect', (reason) => {
-      console.log('User disconnected:', socket.id, 'Reason:', reason);
-
       // Update participant socket status
     if (socket.participantId) {
       db.runAsync(

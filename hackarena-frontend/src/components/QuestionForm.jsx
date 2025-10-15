@@ -154,6 +154,21 @@ const QuestionForm = ({ question = null, onSave, onCancel }) => {
 
   useEffect(() => {
     if (question) {
+      // Helper function to safely parse JSON with fallback
+      const safeJsonParse = (value, fallback) => {
+        if (!value) return fallback;
+        if (typeof value === 'object') return value; // Already parsed
+        if (typeof value === 'string') {
+          try {
+            return JSON.parse(value);
+          } catch (e) {
+            console.warn('Failed to parse JSON value:', value, e);
+            return fallback;
+          }
+        }
+        return fallback;
+      };
+
       setFormData({
         questionText: question.question_text || '',
         questionType: question.question_type || 'mcq',
@@ -163,30 +178,23 @@ const QuestionForm = ({ question = null, onSave, onCancel }) => {
         bugFixInstructions: question.bug_fix_instructions || '',
         ideTemplate: question.ide_template || '',
         ideLanguage: question.ide_language || 'javascript',
-        options: question.options || ['', '', '', ''],
-        correctAnswer: question.correct_answer ? (typeof question.correct_answer === 'string' ? (() => {
-          try {
-            return JSON.parse(question.correct_answer);
-          } catch (e) {
-            // If it's not valid JSON, treat it as a plain string (for single answers)
-            return question.correct_answer;
-          }
-        })() : question.correct_answer) : [],
+        options: Array.isArray(question.options) ? question.options : ['', '', '', ''],
+        correctAnswer: question.correct_answer ? safeJsonParse(question.correct_answer, '') : '',
         hint: question.hint || '',
-        hintPenalty: question.hint_penalty || 10,
-        timeLimit: question.time_limit || 60,
-        marks: question.marks || 10,
+        hintPenalty: typeof question.hint_penalty === 'number' ? question.hint_penalty : 10,
+        timeLimit: typeof question.time_limit === 'number' ? question.time_limit : 60,
+        marks: typeof question.marks === 'number' ? question.marks : 10,
         difficulty: question.difficulty || 'medium',
         explanation: question.explanation || '',
         evaluationMode: question.evaluation_mode || 'mcq',
-        testCases: question.test_cases || '',
+        testCases: typeof question.test_cases === 'string' ? question.test_cases : '',
         aiValidationSettings: question.ai_validation_settings || '',
         imageUrl: question.image_url || '',
-        crosswordGrid: question.crossword_grid ? (typeof question.crossword_grid === 'string' ? JSON.parse(question.crossword_grid) : question.crossword_grid) : [],
-        crosswordClues: question.crossword_clues ? (typeof question.crossword_clues === 'string' ? JSON.parse(question.crossword_clues) : question.crossword_clues) : {},
-        crosswordSize: question.crossword_size ? (typeof question.crossword_size === 'string' ? JSON.parse(question.crossword_size) : question.crossword_size) : { rows: 10, cols: 10 },
-        timeoutLimit: question.timeout_limit || 5000,
-        memoryLimit: question.memory_limit || 256,
+        crosswordGrid: safeJsonParse(question.crossword_grid, []),
+        crosswordClues: safeJsonParse(question.crossword_clues, {}),
+        crosswordSize: safeJsonParse(question.crossword_size, { rows: 10, cols: 10 }),
+        timeoutLimit: typeof question.timeout_limit === 'number' ? question.timeout_limit : 5000,
+        memoryLimit: typeof question.memory_limit === 'number' ? question.memory_limit : 256,
         codeTemplate: question.code_template || ''
       })
     }
@@ -198,6 +206,10 @@ const QuestionForm = ({ question = null, onSave, onCancel }) => {
     // Basic validation with enhanced messages
     if (!formData.questionText.trim()) {
       errors.questionText = 'Question text is required. Please enter a clear, engaging question.'
+    } else if (formData.questionText.trim().length < 10) {
+      errors.questionText = 'Question text is too short. Please provide a more detailed question (at least 10 characters).'
+    } else if (formData.questionText.trim().length > 1000) {
+      errors.questionText = 'Question text is too long. Please keep it under 1000 characters.'
     }
 
     if (formData.questionType === 'mcq' && formData.options.filter(opt => opt.trim()).length < 2) {
@@ -221,6 +233,8 @@ const QuestionForm = ({ question = null, onSave, onCancel }) => {
       if (formData.evaluationMode === 'mcq') {
         if (!formData.codeSnippet.trim()) {
           errors.codeSnippet = 'Code snippet is required for Code Snippet MCQ. Provide the code that participants will analyze.'
+        } else if (formData.codeSnippet.trim().length > 10000) {
+          errors.codeSnippet = 'Code snippet is too long. Please keep it under 10,000 characters.'
         }
         if (formData.options.filter(opt => opt.trim()).length < 2) {
           errors.codeOptions = 'At least 2 code options are required. Create different code choices for participants to select from.'
@@ -231,13 +245,19 @@ const QuestionForm = ({ question = null, onSave, onCancel }) => {
       } else if (formData.evaluationMode === 'bugfix') {
         if (!formData.bugFixCode.trim()) {
           errors.bugFixCode = 'Buggy code is required for Bug Fix Mode. Provide the code with intentional errors.'
+        } else if (formData.bugFixCode.trim().length > 10000) {
+          errors.bugFixCode = 'Buggy code is too long. Please keep it under 10,000 characters.'
         }
         if (!formData.correctAnswer.trim()) {
           errors.correctAnswer = 'Expected fixed code is required. Show the corrected version of the code.'
+        } else if (formData.correctAnswer.trim().length > 10000) {
+          errors.correctAnswer = 'Fixed code is too long. Please keep it under 10,000 characters.'
         }
       } else if (formData.evaluationMode === 'ide') {
         if (!formData.correctAnswer.trim()) {
           errors.correctAnswer = 'Expected solution code is required for IDE Mode. Provide the complete working solution.'
+        } else if (formData.correctAnswer.trim().length > 50000) {
+          errors.correctAnswer = 'Solution code is too long. Please keep it under 50,000 characters.'
         }
       } else if (formData.evaluationMode === 'compiler') {
         if (!formData.testCases.trim()) {
@@ -247,11 +267,21 @@ const QuestionForm = ({ question = null, onSave, onCancel }) => {
             const testCases = JSON.parse(formData.testCases)
             if (!Array.isArray(testCases) || testCases.length === 0) {
               errors.testCases = 'Test cases must be a non-empty array. Add at least one test case to evaluate code.'
+            } else if (testCases.length > 20) {
+              errors.testCases = 'Too many test cases. Please limit to 20 test cases maximum.'
             } else {
               for (let i = 0; i < testCases.length; i++) {
                 const testCase = testCases[i]
                 if (!testCase.input || !testCase.expectedOutput) {
                   errors.testCases = `Test case ${i + 1} must have both 'input' and 'expectedOutput' fields. Each test case needs sample input and expected result.`
+                  break
+                }
+                if (typeof testCase.input !== 'string' || typeof testCase.expectedOutput !== 'string') {
+                  errors.testCases = `Test case ${i + 1} must have string values for 'input' and 'expectedOutput'.`
+                  break
+                }
+                if (testCase.input.length > 1000 || testCase.expectedOutput.length > 1000) {
+                  errors.testCases = `Test case ${i + 1} input or output is too long. Please keep each under 1000 characters.`
                   break
                 }
               }
@@ -281,12 +311,34 @@ const QuestionForm = ({ question = null, onSave, onCancel }) => {
       errors.correctAnswer = 'Correct answer is required. Please specify the right answer for this question type.'
     }
 
+    // Validate time limits
+    if (formData.timeLimit < 10 || formData.timeLimit > 300) {
+      errors.timeLimit = 'Time limit must be between 10 and 300 seconds.'
+    }
+
+    // Validate marks
+    if (formData.marks < 1 || formData.marks > 100) {
+      errors.marks = 'Points must be between 1 and 100.'
+    }
+
+    // Validate hint penalty
+    if (formData.hintPenalty < 0 || formData.hintPenalty > 50) {
+      errors.hintPenalty = 'Hint penalty must be between 0 and 50 points.'
+    }
+
     return errors
   }, [formData])
 
   const handleSubmit = useCallback(async (e) => {
     e.preventDefault()
+
+    // Prevent double submission
+    if (isSubmitting) {
+      return
+    }
+
     setIsSubmitting(true)
+    setValidationErrors({})
 
     const errors = validateForm()
     setValidationErrors(errors)
@@ -304,8 +356,8 @@ const QuestionForm = ({ question = null, onSave, onCancel }) => {
       setTimeout(() => {
         const firstErrorField = Object.keys(errors)[0]
         const errorElement = document.querySelector(`[data-error="${firstErrorField}"]`) ||
-                           document.querySelector(`#${firstErrorField}-error`) ||
-                           document.querySelector(`[aria-describedby*="${firstErrorField}"]`)
+                            document.querySelector(`#${firstErrorField}-error`) ||
+                            document.querySelector(`[aria-describedby*="${firstErrorField}"]`)
         if (errorElement) {
           errorElement.scrollIntoView({ behavior: 'smooth', block: 'center' })
         }
@@ -320,12 +372,33 @@ const QuestionForm = ({ question = null, onSave, onCancel }) => {
       toast.success(question ? 'Question updated successfully!' : 'Question created successfully!')
     } catch (error) {
       console.error('Error saving question:', error)
-      setValidationErrors({ submit: 'Failed to save question. Please check your connection and try again.' })
-      toast.error('Failed to save question. Please try again.')
+
+      let errorMessage = 'Failed to save question. Please try again.'
+
+      if (error.response) {
+        // Server responded with error status
+        if (error.response.status === 400) {
+          errorMessage = 'Invalid question data. Please check your inputs and try again.'
+        } else if (error.response.status === 401) {
+          errorMessage = 'Authentication failed. Please log in again.'
+        } else if (error.response.status === 403) {
+          errorMessage = 'You do not have permission to save questions.'
+        } else if (error.response.status >= 500) {
+          errorMessage = 'Server error. Please try again in a few moments.'
+        } else if (error.response.data?.message) {
+          errorMessage = error.response.data.message
+        }
+      } else if (error.request) {
+        // Network error
+        errorMessage = 'Network error. Please check your connection and try again.'
+      }
+
+      setValidationErrors({ submit: errorMessage })
+      toast.error(errorMessage)
     } finally {
       setIsSubmitting(false)
     }
-  }, [formData, onSave, validateForm])
+  }, [formData, onSave, validateForm, isSubmitting])
 
   const addOption = useCallback(() => {
     setFormData(prev => ({
@@ -514,7 +587,36 @@ const QuestionForm = ({ question = null, onSave, onCancel }) => {
                       setFormData(prev => ({
                         ...prev,
                         questionType: newType,
-                        correctAnswer: newType === 'multiple_answers' ? [] : ''
+                        correctAnswer: newType === 'multiple_answers' ? [] : '',
+                        // Reset evaluation mode for code questions
+                        evaluationMode: newType === 'code' ? 'mcq' : prev.evaluationMode,
+                        // Clear code-specific fields when not code type
+                        codeSnippet: newType !== 'code' ? '' : prev.codeSnippet,
+                        codeLanguage: newType !== 'code' ? 'javascript' : prev.codeLanguage,
+                        bugFixCode: newType !== 'code' ? '' : prev.bugFixCode,
+                        bugFixInstructions: newType !== 'code' ? '' : prev.bugFixInstructions,
+                        ideTemplate: newType !== 'code' ? '' : prev.ideTemplate,
+                        ideLanguage: newType !== 'code' ? 'javascript' : prev.ideLanguage,
+                        testCases: newType !== 'code' ? '' : prev.testCases,
+                        codeTemplate: newType !== 'code' ? '' : prev.codeTemplate,
+                        // Clear crossword fields when not crossword
+                        crosswordGrid: newType !== 'crossword' ? [] : prev.crosswordGrid,
+                        crosswordClues: newType !== 'crossword' ? {} : prev.crosswordClues,
+                        crosswordSize: newType !== 'crossword' ? { rows: 10, cols: 10 } : prev.crosswordSize,
+                        // Clear image URL when not image type
+                        imageUrl: newType !== 'image' ? '' : prev.imageUrl
+                      }));
+                      // Clear validation errors for changed fields
+                      setValidationErrors(prev => ({
+                        ...prev,
+                        questionType: undefined,
+                        correctAnswer: undefined,
+                        codeSnippet: undefined,
+                        bugFixCode: undefined,
+                        testCases: undefined,
+                        crosswordGrid: undefined,
+                        crosswordClues: undefined,
+                        imageUrl: undefined
                       }));
                     }}
                     className="input w-full text-base py-1 px-4 rounded-lg border-gray-200 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200"
@@ -614,7 +716,29 @@ const QuestionForm = ({ question = null, onSave, onCancel }) => {
                     </label>
                     <select
                       value={formData.evaluationMode}
-                      onChange={(e) => setFormData(prev => ({ ...prev, evaluationMode: e.target.value }))}
+                      onChange={(e) => {
+                        const newMode = e.target.value;
+                        setFormData(prev => ({
+                          ...prev,
+                          evaluationMode: newMode,
+                          // Reset fields based on new evaluation mode
+                          correctAnswer: newMode === 'bugfix' || newMode === 'ide' ? '' : prev.correctAnswer,
+                          testCases: newMode === 'compiler' ? prev.testCases : '',
+                          codeTemplate: newMode === 'ide' || newMode === 'compiler' ? prev.codeTemplate : '',
+                          ideTemplate: newMode === 'ide' ? prev.ideTemplate : '',
+                          ideLanguage: newMode === 'ide' ? prev.ideLanguage : 'javascript',
+                          bugFixCode: newMode === 'bugfix' ? prev.bugFixCode : '',
+                          bugFixInstructions: newMode === 'bugfix' ? prev.bugFixInstructions : ''
+                        }));
+                        // Clear validation errors for changed fields
+                        setValidationErrors(prev => ({
+                          ...prev,
+                          correctAnswer: undefined,
+                          testCases: undefined,
+                          codeSnippet: undefined,
+                          bugFixCode: undefined
+                        }));
+                      }}
                       className="input w-full text-base py-3 px-4 rounded-lg border-purple-200 focus:border-purple-400 focus:ring-2 focus:ring-purple-500/20 transition-all duration-200"
                     >
                       <option value="mcq">🧩 Code Snippet MCQ - Multiple choice with code options</option>
@@ -985,9 +1109,78 @@ const QuestionForm = ({ question = null, onSave, onCancel }) => {
                         <textarea
                           value={formData.testCases}
                           onChange={(e) => {
-                            setFormData(prev => ({ ...prev, testCases: e.target.value }))
-                            if (validationErrors.testCases) {
-                              setValidationErrors(prev => ({ ...prev, testCases: undefined }))
+                            const value = e.target.value;
+                            setFormData(prev => ({ ...prev, testCases: value }));
+
+                            // Real-time JSON validation with user feedback
+                            if (value.trim()) {
+                              try {
+                                const testCases = JSON.parse(value);
+                                if (!Array.isArray(testCases)) {
+                                  setValidationErrors(prev => ({
+                                    ...prev,
+                                    testCases: 'Test cases must be an array of objects.'
+                                  }));
+                                } else if (testCases.length === 0) {
+                                  setValidationErrors(prev => ({
+                                    ...prev,
+                                    testCases: 'At least one test case is required.'
+                                  }));
+                                } else if (testCases.length > 20) {
+                                  setValidationErrors(prev => ({
+                                    ...prev,
+                                    testCases: 'Maximum 20 test cases allowed.'
+                                  }));
+                                } else {
+                                  // Validate each test case
+                                  let isValid = true;
+                                  for (let i = 0; i < testCases.length; i++) {
+                                    const testCase = testCases[i];
+                                    if (typeof testCase !== 'object' || testCase === null) {
+                                      setValidationErrors(prev => ({
+                                        ...prev,
+                                        testCases: `Test case ${i + 1} must be an object.`
+                                      }));
+                                      isValid = false;
+                                      break;
+                                    }
+                                    if (!('input' in testCase) || !('expectedOutput' in testCase)) {
+                                      setValidationErrors(prev => ({
+                                        ...prev,
+                                        testCases: `Test case ${i + 1} must have both 'input' and 'expectedOutput' fields.`
+                                      }));
+                                      isValid = false;
+                                      break;
+                                    }
+                                    if (typeof testCase.input !== 'string' || typeof testCase.expectedOutput !== 'string') {
+                                      setValidationErrors(prev => ({
+                                        ...prev,
+                                        testCases: `Test case ${i + 1} input and expectedOutput must be strings.`
+                                      }));
+                                      isValid = false;
+                                      break;
+                                    }
+                                    if (testCase.input.length > 1000 || testCase.expectedOutput.length > 1000) {
+                                      setValidationErrors(prev => ({
+                                        ...prev,
+                                        testCases: `Test case ${i + 1} input or output exceeds 1000 characters.`
+                                      }));
+                                      isValid = false;
+                                      break;
+                                    }
+                                  }
+                                  if (isValid) {
+                                    setValidationErrors(prev => ({ ...prev, testCases: undefined }));
+                                  }
+                                }
+                              } catch (error) {
+                                setValidationErrors(prev => ({
+                                  ...prev,
+                                  testCases: 'Invalid JSON format. Please check your syntax.'
+                                }));
+                              }
+                            } else {
+                              setValidationErrors(prev => ({ ...prev, testCases: undefined }));
                             }
                           }}
                           className={`input w-full h-48 font-mono text-sm resize-none ${validationErrors.testCases ? 'border-red-500 focus:border-red-500' : ''}`}
@@ -1248,37 +1441,107 @@ const QuestionForm = ({ question = null, onSave, onCancel }) => {
                     <input
                       type="file"
                       accept="image/*"
+                      disabled={isSubmitting}
                       onChange={async (e) => {
                         const file = e.target.files[0];
                         if (file) {
+                          // Validate file type
+                          const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
+                          if (!allowedTypes.includes(file.type)) {
+                            toast.error('Please select a valid image file (JPEG, PNG, GIF, or WebP)');
+                            return;
+                          }
+
+                          // Validate file size (5MB limit)
+                          const maxSize = 5 * 1024 * 1024; // 5MB
+                          if (file.size > maxSize) {
+                            toast.error('Image file size must be less than 5MB');
+                            return;
+                          }
+
                           const formDataUpload = new FormData();
                           formDataUpload.append('image', file);
 
-                          try {
-                            const response = await fetch(`http://localhost:10000/api/games/upload-image`, {
-                              method: 'POST',
-                              body: formDataUpload,
-                              headers: {
-                                'Authorization': `Bearer ${localStorage.getItem('hackarena_token')}`
+                          const uploadImage = async (retryCount = 0) => {
+                            try {
+                              setIsSubmitting(true);
+                              const response = await fetch(`${import.meta.env.VITE_API_URL}/api/games/upload-image`, {
+                                method: 'POST',
+                                body: formDataUpload,
+                                headers: {
+                                  'Authorization': `Bearer ${localStorage.getItem('hackarena_token')}`
+                                }
+                              });
+
+                              if (!response.ok) {
+                                const errorData = await response.json().catch(() => ({}));
+                                throw new Error(errorData.message || `Upload failed with status ${response.status}`);
                               }
-                            });
-                            const data = await response.json();
-                            setFormData(prev => ({ ...prev, imageUrl: data.image_url }));
-                          } catch (error) {
-                            console.error('Upload failed:', error);
-                            toast.error('Failed to upload image');
-                          }
+
+                              const data = await response.json();
+                              if (!data.image_url) {
+                                throw new Error('Invalid response: missing image URL');
+                              }
+
+                              setFormData(prev => ({ ...prev, imageUrl: data.image_url }));
+                              toast.success('Image uploaded successfully!');
+                            } catch (error) {
+                              console.error('Upload failed:', error);
+
+                              // Retry logic for network errors
+                              if ((error.name === 'TypeError' && error.message.includes('fetch')) ||
+                                  error.message.includes('NetworkError') ||
+                                  error.message.includes('Failed to fetch')) {
+
+                                if (retryCount < 3) {
+                                  console.log(`Retrying image upload (${retryCount + 1}/3) in 2 seconds...`);
+                                  toast.info(`Upload failed, retrying... (${retryCount + 1}/3)`);
+                                  setTimeout(() => uploadImage(retryCount + 1), 2000);
+                                  return;
+                                }
+                              }
+
+                              // Show appropriate error message
+                              if (error.name === 'TypeError' && error.message.includes('fetch')) {
+                                toast.error('Network error: Please check your connection and try again');
+                              } else if (error.message.includes('413')) {
+                                toast.error('Image file is too large. Please choose a smaller image (max 5MB)');
+                              } else if (error.message.includes('415')) {
+                                toast.error('Invalid file type. Please select a valid image file');
+                              } else {
+                                toast.error(`Upload failed: ${error.message}`);
+                              }
+                            } finally {
+                              setIsSubmitting(false);
+                            }
+                          };
+
+                          uploadImage();
                         }
                       }}
                       className="input w-full"
                     />
                     {formData.imageUrl && (
                       <div className="mt-2">
-                        <img
-                          src={`http://localhost:3001${formData.imageUrl}`}
-                          alt="Question"
-                          className="max-w-full h-48 object-contain border rounded"
-                        />
+                        {isSubmitting ? (
+                          <div className="flex items-center justify-center h-48 bg-gray-100 border-2 border-dashed border-gray-300 rounded-lg">
+                            <div className="text-center">
+                              <Loader className="h-8 w-8 animate-spin text-blue-600 mx-auto mb-2" />
+                              <p className="text-sm text-gray-600">Uploading image...</p>
+                            </div>
+                          </div>
+                        ) : (
+                          <img
+                            src={`${import.meta.env.VITE_API_URL}${formData.imageUrl}`}
+                            alt="Question"
+                            className="max-w-full h-48 object-contain border rounded"
+                            onError={(e) => {
+                              console.error('Failed to load uploaded image');
+                              e.target.style.display = 'none';
+                              toast.error('Failed to load uploaded image');
+                            }}
+                          />
+                        )}
                       </div>
                     )}
                   </div>
@@ -1297,13 +1560,28 @@ const QuestionForm = ({ question = null, onSave, onCancel }) => {
                         <input
                           type="number"
                           value={formData.crosswordSize.rows}
-                          onChange={(e) => setFormData(prev => ({
-                            ...prev,
-                            crosswordSize: { ...prev.crosswordSize, rows: parseInt(e.target.value) || 10 }
-                          }))}
-                          className="input w-full"
+                          onChange={(e) => {
+                            const value = parseInt(e.target.value) || 10;
+                            setFormData(prev => ({
+                              ...prev,
+                              crosswordSize: { ...prev.crosswordSize, rows: value }
+                            }));
+                            // Real-time validation
+                            if (value < 5 || value > 20) {
+                              setValidationErrors(prev => ({
+                                ...prev,
+                                crosswordSize: 'Crossword dimensions must be between 5 and 20.'
+                              }));
+                            } else {
+                              setValidationErrors(prev => ({ ...prev, crosswordSize: undefined }));
+                            }
+                          }}
+                          className={`input w-full ${
+                            validationErrors.crosswordSize ? 'border-red-500' : ''
+                          }`}
                           min="5"
                           max="20"
+                          aria-describedby={validationErrors.crosswordSize ? "crosswordSize-error" : undefined}
                         />
                       </div>
                       <div>
@@ -1311,13 +1589,28 @@ const QuestionForm = ({ question = null, onSave, onCancel }) => {
                         <input
                           type="number"
                           value={formData.crosswordSize.cols}
-                          onChange={(e) => setFormData(prev => ({
-                            ...prev,
-                            crosswordSize: { ...prev.crosswordSize, cols: parseInt(e.target.value) || 10 }
-                          }))}
-                          className="input w-full"
+                          onChange={(e) => {
+                            const value = parseInt(e.target.value) || 10;
+                            setFormData(prev => ({
+                              ...prev,
+                              crosswordSize: { ...prev.crosswordSize, cols: value }
+                            }));
+                            // Real-time validation
+                            if (value < 5 || value > 20) {
+                              setValidationErrors(prev => ({
+                                ...prev,
+                                crosswordSize: 'Crossword dimensions must be between 5 and 20.'
+                              }));
+                            } else {
+                              setValidationErrors(prev => ({ ...prev, crosswordSize: undefined }));
+                            }
+                          }}
+                          className={`input w-full ${
+                            validationErrors.crosswordSize ? 'border-red-500' : ''
+                          }`}
                           min="5"
                           max="20"
+                          aria-describedby={validationErrors.crosswordSize ? "crosswordSize-error" : undefined}
                         />
                       </div>
                     </div>
@@ -1330,8 +1623,12 @@ const QuestionForm = ({ question = null, onSave, onCancel }) => {
                           try {
                             const clues = JSON.parse(e.target.value);
                             setFormData(prev => ({ ...prev, crosswordClues: clues }));
+                            if (validationErrors.crosswordClues) {
+                              setValidationErrors(prev => ({ ...prev, crosswordClues: undefined }));
+                            }
                           } catch (error) {
-                            // Invalid JSON, keep current value
+                            // Show user-friendly error message
+                            toast.error('Invalid JSON format for crossword clues. Please check your syntax.');
                           }
                         }}
                         className="input w-full h-32 font-mono text-sm"
@@ -1347,8 +1644,12 @@ const QuestionForm = ({ question = null, onSave, onCancel }) => {
                           try {
                             const grid = JSON.parse(e.target.value);
                             setFormData(prev => ({ ...prev, crosswordGrid: grid }));
+                            if (validationErrors.crosswordGrid) {
+                              setValidationErrors(prev => ({ ...prev, crosswordGrid: undefined }));
+                            }
                           } catch (error) {
-                            // Invalid JSON, keep current value
+                            // Show user-friendly error message
+                            toast.error('Invalid JSON format for crossword grid. Please check your syntax.');
                           }
                         }}
                         className="input w-full h-32 font-mono text-sm"
@@ -1379,12 +1680,37 @@ const QuestionForm = ({ question = null, onSave, onCancel }) => {
                     <input
                       type="number"
                       value={formData.timeLimit}
-                      onChange={(e) => setFormData(prev => ({ ...prev, timeLimit: parseInt(e.target.value) || 60 }))}
-                      className="input w-full py-3 px-4 rounded-lg border-gray-200 focus:border-blue-400 focus:ring-2 focus:ring-blue-500/20 transition-all duration-200 text-base"
+                      onChange={(e) => {
+                        const value = parseInt(e.target.value) || 60;
+                        setFormData(prev => ({ ...prev, timeLimit: value }));
+                        // Real-time validation
+                        if (value < 10 || value > 300) {
+                          setValidationErrors(prev => ({
+                            ...prev,
+                            timeLimit: 'Time limit must be between 10 and 300 seconds.'
+                          }));
+                        } else {
+                          setValidationErrors(prev => ({ ...prev, timeLimit: undefined }));
+                        }
+                      }}
+                      className={`input w-full py-3 px-4 rounded-lg transition-all duration-200 text-base ${
+                        validationErrors.timeLimit
+                          ? 'border-red-300 focus:border-red-500 bg-red-50/50'
+                          : 'border-gray-200 focus:border-blue-400 focus:ring-2 focus:ring-blue-500/20'
+                      }`}
                       min="10"
                       max="300"
                       placeholder="60"
+                      aria-describedby={validationErrors.timeLimit ? "timeLimit-error" : undefined}
                     />
+                    {validationErrors.timeLimit && (
+                      <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded-lg">
+                        <p id="timeLimit-error" className="text-sm text-red-700 flex items-center">
+                          <AlertCircle className="h-4 w-4 mr-2 flex-shrink-0" />
+                          {validationErrors.timeLimit}
+                        </p>
+                      </div>
+                    )}
                     <p className="text-xs text-gray-500">How long participants have to answer</p>
                   </div>
 
@@ -1396,12 +1722,37 @@ const QuestionForm = ({ question = null, onSave, onCancel }) => {
                     <input
                       type="number"
                       value={formData.marks}
-                      onChange={(e) => setFormData(prev => ({ ...prev, marks: parseInt(e.target.value) || 10 }))}
-                      className="input w-full py-3 px-4 rounded-lg border-gray-200 focus:border-green-400 focus:ring-2 focus:ring-green-500/20 transition-all duration-200 text-base"
+                      onChange={(e) => {
+                        const value = parseInt(e.target.value) || 10;
+                        setFormData(prev => ({ ...prev, marks: value }));
+                        // Real-time validation
+                        if (value < 1 || value > 100) {
+                          setValidationErrors(prev => ({
+                            ...prev,
+                            marks: 'Points must be between 1 and 100.'
+                          }));
+                        } else {
+                          setValidationErrors(prev => ({ ...prev, marks: undefined }));
+                        }
+                      }}
+                      className={`input w-full py-3 px-4 rounded-lg transition-all duration-200 text-base ${
+                        validationErrors.marks
+                          ? 'border-red-300 focus:border-red-500 bg-red-50/50'
+                          : 'border-gray-200 focus:border-green-400 focus:ring-2 focus:ring-green-500/20'
+                      }`}
                       min="1"
                       max="100"
                       placeholder="10"
+                      aria-describedby={validationErrors.marks ? "marks-error" : undefined}
                     />
+                    {validationErrors.marks && (
+                      <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded-lg">
+                        <p id="marks-error" className="text-sm text-red-700 flex items-center">
+                          <AlertCircle className="h-4 w-4 mr-2 flex-shrink-0" />
+                          {validationErrors.marks}
+                        </p>
+                      </div>
+                    )}
                     <p className="text-xs text-gray-500">Points awarded for correct answer</p>
                   </div>
 
@@ -1413,12 +1764,37 @@ const QuestionForm = ({ question = null, onSave, onCancel }) => {
                     <input
                       type="number"
                       value={formData.hintPenalty}
-                      onChange={(e) => setFormData(prev => ({ ...prev, hintPenalty: parseInt(e.target.value) || 10 }))}
-                      className="input w-full py-3 px-4 rounded-lg border-gray-200 focus:border-orange-400 focus:ring-2 focus:ring-orange-500/20 transition-all duration-200"
+                      onChange={(e) => {
+                        const value = parseInt(e.target.value) || 10;
+                        setFormData(prev => ({ ...prev, hintPenalty: value }));
+                        // Real-time validation
+                        if (value < 0 || value > 50) {
+                          setValidationErrors(prev => ({
+                            ...prev,
+                            hintPenalty: 'Hint penalty must be between 0 and 50 points.'
+                          }));
+                        } else {
+                          setValidationErrors(prev => ({ ...prev, hintPenalty: undefined }));
+                        }
+                      }}
+                      className={`input w-full py-3 px-4 rounded-lg transition-all duration-200 ${
+                        validationErrors.hintPenalty
+                          ? 'border-red-300 focus:border-red-500 bg-red-50/50'
+                          : 'border-gray-200 focus:border-orange-400 focus:ring-2 focus:ring-orange-500/20'
+                      }`}
                       min="0"
                       max="50"
                       placeholder="10"
+                      aria-describedby={validationErrors.hintPenalty ? "hintPenalty-error" : undefined}
                     />
+                    {validationErrors.hintPenalty && (
+                      <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded-lg">
+                        <p id="hintPenalty-error" className="text-sm text-red-700 flex items-center">
+                          <AlertCircle className="h-4 w-4 mr-2 flex-shrink-0" />
+                          {validationErrors.hintPenalty}
+                        </p>
+                      </div>
+                    )}
                     <p className="text-xs text-gray-500">Points deducted for using hint</p>
                   </div>
                 </div>
@@ -1433,12 +1809,32 @@ const QuestionForm = ({ question = null, onSave, onCancel }) => {
                     <input
                       type="number"
                       value={formData.timeoutLimit}
-                      onChange={(e) => setFormData(prev => ({ ...prev, timeoutLimit: parseInt(e.target.value) || 5000 }))}
-                      className="input w-full"
+                      onChange={(e) => {
+                        const value = parseInt(e.target.value) || 5000;
+                        setFormData(prev => ({ ...prev, timeoutLimit: value }));
+                        // Real-time validation
+                        if (value < 1000 || value > 30000) {
+                          setValidationErrors(prev => ({
+                            ...prev,
+                            timeoutLimit: 'Timeout must be between 1000 and 30000 milliseconds.'
+                          }));
+                        } else {
+                          setValidationErrors(prev => ({ ...prev, timeoutLimit: undefined }));
+                        }
+                      }}
+                      className={`input w-full ${
+                        validationErrors.timeoutLimit ? 'border-red-500' : ''
+                      }`}
                       min="1000"
                       max="30000"
                       step="1000"
+                      aria-describedby={validationErrors.timeoutLimit ? "timeoutLimit-error" : undefined}
                     />
+                    {validationErrors.timeoutLimit && (
+                      <p id="timeoutLimit-error" className="mt-1 text-sm text-red-600">
+                        {validationErrors.timeoutLimit}
+                      </p>
+                    )}
                   </div>
 
                   <div>
@@ -1448,12 +1844,32 @@ const QuestionForm = ({ question = null, onSave, onCancel }) => {
                     <input
                       type="number"
                       value={formData.memoryLimit}
-                      onChange={(e) => setFormData(prev => ({ ...prev, memoryLimit: parseInt(e.target.value) || 256 }))}
-                      className="input w-full"
+                      onChange={(e) => {
+                        const value = parseInt(e.target.value) || 256;
+                        setFormData(prev => ({ ...prev, memoryLimit: value }));
+                        // Real-time validation
+                        if (value < 64 || value > 1024) {
+                          setValidationErrors(prev => ({
+                            ...prev,
+                            memoryLimit: 'Memory limit must be between 64 and 1024 MB.'
+                          }));
+                        } else {
+                          setValidationErrors(prev => ({ ...prev, memoryLimit: undefined }));
+                        }
+                      }}
+                      className={`input w-full ${
+                        validationErrors.memoryLimit ? 'border-red-500' : ''
+                      }`}
                       min="64"
                       max="1024"
                       step="64"
+                      aria-describedby={validationErrors.memoryLimit ? "memoryLimit-error" : undefined}
                     />
+                    {validationErrors.memoryLimit && (
+                      <p id="memoryLimit-error" className="mt-1 text-sm text-red-600">
+                        {validationErrors.memoryLimit}
+                      </p>
+                    )}
                   </div>
                 </div>
               )}

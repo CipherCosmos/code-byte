@@ -89,7 +89,7 @@ const ImageComponent = ({ question, answer, setAnswer, submitted }) => {
               )}
 
               <img
-                src={`http://localhost:3001${question.image_url}`}
+                src={`${import.meta.env.VITE_API_URL}${question.image_url}`}
                 alt="Question"
                 className={`max-w-full h-auto transition-all duration-300 ${
                   imageLoaded ? 'opacity-100' : 'opacity-0'

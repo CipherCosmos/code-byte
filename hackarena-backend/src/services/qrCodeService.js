@@ -16,11 +16,8 @@ cloudinary.v2.config({
  */
 export async function generateAndUploadQRCode(gameCode) {
   try {
-    console.log('🎯 Generating QR code for game:', gameCode);
-
     // Generate join URL
     const joinUrl = `https://code-byte-eta.vercel.app/join/${gameCode}`;
-    console.log('🎯 Join URL:', joinUrl);
 
     // Generate QR code as buffer
     const qrCodeBuffer = await QRCode.toBuffer(joinUrl, {
@@ -32,8 +29,6 @@ export async function generateAndUploadQRCode(gameCode) {
         light: '#FFFFFF'
       }
     });
-
-    console.log('🎯 QR code generated as buffer, size:', qrCodeBuffer.length, 'bytes');
 
     // Upload to Cloudinary
     const result = await new Promise((resolve, reject) => {
@@ -50,10 +45,8 @@ export async function generateAndUploadQRCode(gameCode) {
         },
         (error, result) => {
           if (error) {
-            console.error('❌ Cloudinary upload error:', error);
             reject(error);
           } else {
-            console.log('✅ QR code uploaded to Cloudinary:', result.secure_url);
             resolve(result);
           }
         }
@@ -82,10 +75,7 @@ export async function deleteQRCode(qrCodeUrl) {
     const publicIdWithExt = urlParts[urlParts.length - 1];
     const publicId = `hackarena/qrcodes/${publicIdWithExt.split('.')[0]}`;
 
-    console.log('🗑️ Deleting QR code from Cloudinary:', publicId);
-
     await cloudinary.v2.uploader.destroy(publicId);
-    console.log('✅ QR code deleted from Cloudinary');
   } catch (error) {
     console.error('❌ Error deleting QR code from Cloudinary:', error);
     // Don't throw error for delete failures

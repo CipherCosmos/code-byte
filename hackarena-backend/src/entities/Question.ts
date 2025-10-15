@@ -2,31 +2,47 @@ import { Entity, PrimaryColumn, Column, CreateDateColumn, ManyToOne, OneToMany, 
 import { Game } from './Game.js';
 import { Answer } from './Answer.js';
 
+export enum QuestionType {
+  MCQ = 'mcq',
+  MULTIPLE_CHOICE_SINGLE = 'multiple_choice_single',
+  TRUE_FALSE = 'true_false',
+  MULTIPLE_CHOICE = 'multiple_choice',
+  MULTIPLE_ANSWERS = 'multiple_answers',
+  CODE = 'code',
+  CODE_SNIPPET = 'code_snippet',
+  IMAGE = 'image',
+  FILL_BLANK = 'fill_blank',
+  SHORT_ANSWER = 'short_answer',
+  CROSSWORD = 'crossword',
+  CROSSWORD_PUZZLE = 'crossword_puzzle',
+  TEXT_INPUT = 'text_input'
+}
+
 @Entity('questions')
 export class Question {
   @PrimaryColumn('uuid', { default: () => 'gen_random_uuid()' })
   id: string;
 
-  @Column('text')
+  @Column('text', { nullable: false })
   game_id: string;
 
   @ManyToOne(() => Game, game => game.questions, { lazy: true })
   @JoinColumn({ name: 'game_id' })
   game: Promise<Game>;
 
-  @Column('int')
+  @Column('int', { nullable: false })
   question_order: number;
 
-  @Column('text')
+  @Column('text', { nullable: false })
   question_text: string;
 
-  @Column('text')
-  question_type: string;
+  @Column('text', { nullable: false })
+  question_type: QuestionType;
 
   @Column('text', { nullable: true })
   options: string;
 
-  @Column('text')
+  @Column('text', { nullable: false })
   correct_answer: string;
 
   @Column('text', { nullable: true })

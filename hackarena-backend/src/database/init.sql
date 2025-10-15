@@ -34,13 +34,29 @@ CREATE TABLE IF NOT EXISTS games (
   FOREIGN KEY (organizer_id) REFERENCES users (id)
 );
 
+-- Create QuestionType enum
+CREATE TYPE question_type_enum AS ENUM (
+  'mcq',
+  'multiple_choice_single',
+  'true_false',
+  'multiple_choice',
+  'multiple_answers',
+  'code',
+  'image',
+  'fill_blank',
+  'short_answer',
+  'crossword',
+  'crossword_puzzle',
+  'text_input'
+);
+
 -- Questions table
 CREATE TABLE IF NOT EXISTS questions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   game_id TEXT NOT NULL,
   question_order INTEGER NOT NULL,
   question_text TEXT NOT NULL,
-  question_type TEXT NOT NULL,
+  question_type question_type_enum NOT NULL,
   options TEXT,
   correct_answer TEXT NOT NULL,
   hint TEXT,

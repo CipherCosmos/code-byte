@@ -151,7 +151,7 @@ async function testQuestionCreation() {
       name: 'Text Input Question',
       data: {
         questionText: 'What does CPU stand for?',
-        questionType: 'text_input',
+        questionType: 'fill_blank',
         options: JSON.stringify([]),
         correctAnswer: 'Central Processing Unit',
         marks: 10,

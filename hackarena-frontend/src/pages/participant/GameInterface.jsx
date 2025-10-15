@@ -1322,9 +1322,14 @@ int main() {
                 currentQuestion.image_url && (
                   <div className="mb-4 sm:mb-6">
                     <img
-                      src={`http://localhost:3001${currentQuestion.image_url}`}
+                      src={`${import.meta.env.VITE_API_URL}${currentQuestion.image_url}`}
                       alt="Question"
                       className="max-w-full h-48 sm:h-64 object-contain border rounded-lg shadow-sm"
+                      onError={(e) => {
+                        console.error('Failed to load question image');
+                        e.target.style.display = 'none';
+                        // Could show a fallback message
+                      }}
                     />
                   </div>
                 )}

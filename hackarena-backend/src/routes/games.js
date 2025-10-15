@@ -275,10 +275,20 @@ router.get('/:gameId', authenticateToken, async (req, res) => {
 
       try {
         if (question.crossword_clues) {
-          parsedCrosswordClues = JSON.parse(question.crossword_clues);
+          if (typeof question.crossword_clues === 'object') {
+            // Already parsed object, use directly
+            parsedCrosswordClues = question.crossword_clues;
+          } else if (typeof question.crossword_clues === 'string') {
+            // JSON string, parse it
+            parsedCrosswordClues = JSON.parse(question.crossword_clues);
+          } else {
+            // Invalid type, set to null
+            parsedCrosswordClues = null;
+          }
         }
       } catch (error) {
         console.error('Error parsing crossword clues for question', question.id, ':', error);
+        parsedCrosswordClues = null;
       }
 
       try {
@@ -468,22 +478,69 @@ router.delete('/:gameId', authenticateToken, async (req, res) => {
   }
 });
 
-// Add question to game
-router.post('/:gameId/questions', authenticateToken, async (req, res) => {
+// Helper function to parse options
+function parseOptions(options) {
+  let processedOptions = [];
+
   try {
-    // Input validation and sanitization
-    if (!req.params.gameId) {
-      return res.status(400).json({ error: 'Game ID is required' });
+    if (Array.isArray(options)) {
+      processedOptions = [...options];
+    } else if (typeof options === 'string') {
+      const trimmed = options.trim();
+      if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+        processedOptions = JSON.parse(trimmed);
+      } else if (trimmed.includes(',')) {
+        processedOptions = trimmed.split(',').map(opt => opt.trim()).filter(opt => opt.length > 0);
+      } else if (trimmed.length > 0) {
+        processedOptions = [trimmed];
+      }
+    } else if (options != null) {
+      processedOptions = [String(options)];
     }
 
+    processedOptions = processedOptions
+      .filter(opt => opt != null && String(opt).trim().length > 0)
+      .map(opt => String(opt).trim());
+  } catch (error) {
+    console.error('Error parsing options:', error);
+    processedOptions = [];
+  }
+
+  return processedOptions;
+}
+
+// Add question to game
+router.post('/:gameId/questions', authenticateToken, async (req, res) => {
+  let transactionStarted = false;
+
+  try {
+    console.log('📝 ADD QUESTION - Request received');
+    console.log('📝 ADD QUESTION - gameId:', req.params.gameId);
+    console.log('📝 ADD QUESTION - user.id:', req.user.id);
+    console.log('📝 ADD QUESTION - req.body contents:');
+    console.log('   - Full req.body:', JSON.stringify(req.body, null, 2));
+    console.log('   - req.body keys:', Object.keys(req.body));
+    console.log('   - req.body types:', Object.keys(req.body).reduce((acc, key) => {
+      acc[key] = typeof req.body[key];
+      return acc;
+    }, {}));
+
+    // Input validation and sanitization
+    console.log('📝 ADD QUESTION - Starting input validation...');
+    if (!req.params.gameId) {
+      console.log('📝 ADD QUESTION - Validation error: Game ID is required');
+      return res.status(400).json({ error: 'Game ID is required' });
+    }
+    console.log('📝 ADD QUESTION - Game ID validation passed');
+
     // Verify game exists and user has access
+    console.log('📝 ADD QUESTION - Verifying game access...');
     const game = await db.getAsync('SELECT id FROM games WHERE id = $1 AND organizer_id = $2', [req.params.gameId, req.user.id]);
+    console.log('📝 ADD QUESTION - Game verification result:', game ? 'Game found' : 'Game not found');
     if (!game) {
+      console.log('📝 ADD QUESTION - ERROR: Game not found or access denied');
       return res.status(404).json({ error: 'Game not found or access denied' });
     }
-    // console.log('🔍 Backend - POST /:gameId/questions - Request body:', JSON.stringify(req.body, null, 2));
-    // console.log('🔍 Backend - options type:', typeof req.body.options);
-    // console.log('🔍 Backend - options value:', req.body.options);
 
     let {
       questionText,
@@ -504,192 +561,87 @@ router.post('/:gameId/questions', authenticateToken, async (req, res) => {
       crosswordClues,
       crosswordSize,
       timeDecayEnabled,
-      timeDecayFactor
+      timeDecayFactor,
+      code_languages,
+      timeoutLimit: code_timeout,
+      memoryLimit: code_memory_limit,
+      code_template
     } = req.body;
+
+    console.log('📝 ADD QUESTION - Extracted fields from req.body:');
+    console.log('  - questionText:', questionText);
+    console.log('  - questionType:', questionType);
+    console.log('  - options:', options, 'type:', typeof options);
+    console.log('  - correctAnswer:', initialCorrectAnswer, 'type:', typeof initialCorrectAnswer);
+    console.log('  - hint:', hint);
+    console.log('  - hintPenalty:', hintPenalty);
+    console.log('  - timeLimit:', timeLimit);
+    console.log('  - marks:', marks);
+    console.log('  - difficulty:', difficulty);
+    console.log('  - explanation:', explanation);
+    console.log('  - evaluationMode:', evaluationMode);
+    console.log('  - testCases:', testCases, 'type:', typeof testCases);
+    console.log('  - aiValidationSettings:', aiValidationSettings);
+    console.log('  - imageUrl:', imageUrl);
+    console.log('  - crosswordGrid:', crosswordGrid);
+    console.log('  - crosswordClues:', crosswordClues);
+    console.log('  - crosswordSize:', crosswordSize);
+    console.log('  - timeDecayEnabled:', timeDecayEnabled);
+    console.log('  - timeDecayFactor:', timeDecayFactor);
+    console.log('  - code_languages:', code_languages);
+    console.log('  - code_timeout:', code_timeout);
+    console.log('  - code_memory_limit:', code_memory_limit);
+    console.log('  - code_template:', code_template);
 
     // Use a mutable variable for correctAnswer processing
     let correctAnswer = initialCorrectAnswer;
 
     // Validate required fields
+    console.log('📝 ADD QUESTION - Validating required fields...');
     if (!questionText || !questionType) {
-      console.error('Validation error: Missing questionText or questionType');
+      console.log('📝 ADD QUESTION - Validation error: Question text and type are required');
+      console.log('   - questionText:', questionText, 'type:', typeof questionText);
+      console.log('   - questionType:', questionType, 'type:', typeof questionType);
       return res.status(400).json({ error: 'Question text and type are required' });
     }
+    console.log('📝 ADD QUESTION - Required fields validation passed');
 
-    console.log('🔍 Backend - About to process options');
-    console.log('🔍 Backend - Raw options:', options);
-    console.log('🔍 Backend - Options type:', typeof options);
-
-    // Handle options - robust processing with error handling
-    // Arrays may be serialized as comma-separated strings, JSON strings, or already arrays
-    let processedOptions = [];
-
-    try {
-      console.log('🔍 DEBUG: Options processing - Input options:', options, 'Type:', typeof options);
-
-      if (Array.isArray(options)) {
-        // Already an array, use as-is
-        console.log('🔍 DEBUG: Options already an array');
-        processedOptions = [...options]; // Create a copy to avoid mutations
-      } else if (typeof options === 'string') {
-        const trimmedOptions = options.trim();
-
-        if (trimmedOptions.startsWith('[') && trimmedOptions.endsWith(']')) {
-          // JSON string array
-          console.log('🔍 DEBUG: Detected JSON string array, parsing...');
-          try {
-            processedOptions = JSON.parse(trimmedOptions);
-            console.log('🔍 DEBUG: After JSON parse, processedOptions:', processedOptions);
-          } catch (parseError) {
-            console.log('🔍 DEBUG: JSON parse failed, falling back to comma split:', parseError.message);
-            processedOptions = trimmedOptions.slice(1, -1).split(',').map(opt => opt.trim()).filter(opt => opt.length > 0);
-          }
-        } else if (trimmedOptions.includes(',')) {
-          // Comma-separated string
-          console.log('🔍 DEBUG: Detected comma-separated string, splitting...');
-          processedOptions = trimmedOptions.split(',').map(opt => opt.trim()).filter(opt => opt.length > 0);
-          console.log('🔍 DEBUG: After split, processedOptions:', processedOptions);
-        } else if (trimmedOptions.length > 0) {
-          // Single string value
-          console.log('🔍 DEBUG: Single string option, wrapping in array');
-          processedOptions = [trimmedOptions];
-        } else {
-          // Empty string
-          console.log('🔍 DEBUG: Empty options string, using empty array');
-          processedOptions = [];
-        }
-      } else if (options == null || options === undefined) {
-        // Null/undefined
-        console.log('🔍 DEBUG: Options is null/undefined, using empty array');
-        processedOptions = [];
-      } else {
-        // Other types (numbers, objects, etc.)
-        console.log('🔍 DEBUG: Unknown options type, converting to string then array');
-        processedOptions = [String(options)];
-      }
-
-      // Ensure we always have an array
-      if (!Array.isArray(processedOptions)) {
-        console.warn('🔍 DEBUG: processedOptions is not an array after processing, forcing to array');
-        processedOptions = [];
-      }
-
-      // Filter out empty strings and trim whitespace
-      processedOptions = processedOptions
-        .filter(opt => opt != null && String(opt).trim().length > 0)
-        .map(opt => String(opt).trim());
-
-      console.log('🔍 DEBUG: Final processedOptions:', processedOptions, 'isArray:', Array.isArray(processedOptions));
-
-    } catch (error) {
-      console.error('🔍 DEBUG: Error processing options:', error);
-      console.error('🔍 DEBUG: Original options value:', options, 'Type:', typeof options);
-      processedOptions = [];
-    }
-
-    console.log('🔍 Backend - processedOptions after processing:', processedOptions);
-
-    console.log('🔍 Backend - Final processedOptions:', processedOptions, 'isArray:', Array.isArray(processedOptions));
+    // Process options using helper function
+    console.log('📝 ADD QUESTION - Processing options...');
+    const processedOptions = parseOptions(options);
+    console.log('📝 ADD QUESTION - Processed options:', processedOptions);
 
     // Validate question type specific requirements
-    if (questionType === 'mcq') {
-      if (!Array.isArray(processedOptions)) {
-        console.error('Validation error: processedOptions is not an array for MCQ question');
-        console.error('processedOptions:', processedOptions, 'type:', typeof processedOptions);
-        return res.status(400).json({ error: 'MCQ questions must have valid options array' });
-      }
+    console.log('📝 ADD QUESTION - Validating question type specific requirements...');
+    console.log('📝 ADD QUESTION - questionType:', questionType);
+    if (questionType === 'mcq' || questionType === 'multiple_choice') {
+      console.log('📝 ADD QUESTION - MCQ validation: processedOptions.length =', processedOptions.length);
+      console.log('📝 ADD QUESTION - processedOptions:', processedOptions);
       if (processedOptions.length < 2) {
-        console.error('Validation error: MCQ questions must have at least 2 options');
-        console.error('processedOptions length:', processedOptions.length, 'values:', processedOptions);
+        console.log('📝 ADD QUESTION - Validation error: MCQ questions must have at least 2 options');
         return res.status(400).json({ error: 'MCQ questions must have at least 2 options' });
       }
     }
 
-    // Validate image questions
-    if (questionType === 'image') {
-      if (!imageUrl || imageUrl.trim() === '') {
-        return res.status(400).json({ error: 'Image questions must have an image URL' });
-      }
-      // Validate image URL format
-      try {
-        const url = new URL(imageUrl);
-        if (!['http:', 'https:'].includes(url.protocol)) {
-          return res.status(400).json({ error: 'Image URL must be a valid HTTP/HTTPS URL' });
-        }
-      } catch (error) {
-        return res.status(400).json({ error: 'Invalid image URL format' });
-      }
-      // For image questions, correct answer should be descriptive text
-      if (!correctAnswer || correctAnswer.trim().length < 3) {
-        return res.status(400).json({ error: 'Image questions must have a descriptive correct answer (at least 3 characters)' });
-      }
-    }
-
-    // Validate crossword questions
-    if (questionType === 'crossword') {
-      if (!crosswordGrid || crosswordGrid.trim() === '') {
-        return res.status(400).json({ error: 'Crossword questions must have a grid definition' });
-      }
-      if (!crosswordClues || crosswordClues.trim() === '') {
-        return res.status(400).json({ error: 'Crossword questions must have clues' });
-      }
-      if (!crosswordSize || crosswordSize.trim() === '') {
-        return res.status(400).json({ error: 'Crossword questions must have size definition' });
-      }
-
-      // Validate crossword grid format (should be JSON)
-      try {
-        const grid = JSON.parse(crosswordGrid);
-        if (!Array.isArray(grid) || grid.length === 0) {
-          return res.status(400).json({ error: 'Crossword grid must be a non-empty array' });
-        }
-        // Validate grid structure
-        const firstRow = grid[0];
-        if (!Array.isArray(firstRow)) {
-          return res.status(400).json({ error: 'Crossword grid rows must be arrays' });
-        }
-        const expectedCols = firstRow.length;
-        for (let i = 1; i < grid.length; i++) {
-          if (!Array.isArray(grid[i]) || grid[i].length !== expectedCols) {
-            return res.status(400).json({ error: 'All crossword grid rows must have the same number of columns' });
-          }
-        }
-      } catch (error) {
-        return res.status(400).json({ error: 'Invalid crossword grid format - must be valid JSON' });
-      }
-
-      // Validate crossword clues format
-      try {
-        const clues = JSON.parse(crosswordClues);
-        if (typeof clues !== 'object' || clues === null) {
-          return res.status(400).json({ error: 'Crossword clues must be a valid object' });
-        }
-      } catch (error) {
-        return res.status(400).json({ error: 'Invalid crossword clues format - must be valid JSON' });
-      }
-
-      // Validate crossword size format
-      try {
-        const size = JSON.parse(crosswordSize);
-        if (typeof size !== 'object' || size === null || !size.rows || !size.cols) {
-          return res.status(400).json({ error: 'Crossword size must be an object with rows and cols properties' });
-        }
-        if (typeof size.rows !== 'number' || typeof size.cols !== 'number' || size.rows < 1 || size.cols < 1) {
-          return res.status(400).json({ error: 'Crossword size rows and cols must be positive numbers' });
-        }
-      } catch (error) {
-        return res.status(400).json({ error: 'Invalid crossword size format - must be valid JSON' });
+    if (questionType === 'true_false') {
+      console.log('📝 ADD QUESTION - True/False validation: processedOptions.length =', processedOptions.length);
+      console.log('📝 ADD QUESTION - processedOptions:', processedOptions);
+      if (processedOptions.length !== 2) {
+        console.log('📝 ADD QUESTION - Validation error: True/False questions must have exactly 2 options');
+        return res.status(400).json({ error: 'True/False questions must have exactly 2 options' });
       }
     }
 
     if (questionType === 'multiple_answers') {
-      if (!Array.isArray(processedOptions) || processedOptions.length < 2) {
-        console.error('Validation error: Multiple answers questions must have at least 2 options');
-        console.error('processedOptions:', processedOptions, 'length:', processedOptions?.length);
+      console.log('📝 ADD QUESTION - Multiple answers validation: processedOptions.length =', processedOptions.length);
+      console.log('📝 ADD QUESTION - processedOptions:', processedOptions);
+      console.log('📝 ADD QUESTION - correctAnswer:', correctAnswer, 'type:', typeof correctAnswer);
+      if (processedOptions.length < 2) {
+        console.log('📝 ADD QUESTION - Validation error: Multiple answers questions must have at least 2 options');
         return res.status(400).json({ error: 'Multiple answers questions must have at least 2 options' });
       }
 
-      // Process correct answer with robust error handling
+      console.log('📝 ADD QUESTION - Processing correct answer for multiple_answers...');
       let processedCorrectAnswer = [];
       try {
         if (Array.isArray(correctAnswer)) {
@@ -706,212 +658,282 @@ router.post('/:gameId/questions', authenticateToken, async (req, res) => {
           processedCorrectAnswer = [String(correctAnswer)];
         }
       } catch (error) {
-        console.error('Error processing correct answer for multiple_answers:', error);
+        console.error('📝 ADD QUESTION - Error processing correct answer for multiple_answers:', error);
         processedCorrectAnswer = [];
       }
 
-      if (!Array.isArray(processedCorrectAnswer) || processedCorrectAnswer.length < 1) {
-        console.error('Validation error: Multiple answers questions must have at least 1 correct answer');
-        console.error('processedCorrectAnswer:', processedCorrectAnswer);
+      console.log('📝 ADD QUESTION - processedCorrectAnswer:', processedCorrectAnswer);
+      if (processedCorrectAnswer.length < 1) {
+        console.log('📝 ADD QUESTION - Validation error: Multiple answers questions must have at least 1 correct answer');
         return res.status(400).json({ error: 'Multiple answers questions must have at least 1 correct answer' });
       }
 
-      // Validate that correct answers are valid indices or values
+      // Validate correct answers
+      console.log('📝 ADD QUESTION - Validating correct answers...');
       for (const ans of processedCorrectAnswer) {
         const normalizedAns = typeof ans === 'string' ? ans.trim() : ans;
         if (typeof normalizedAns === 'number') {
           if (normalizedAns < 0 || normalizedAns >= processedOptions.length) {
-            console.error('Invalid correct answer index:', normalizedAns, 'options length:', processedOptions.length);
+            console.log('📝 ADD QUESTION - Validation error: Invalid correct answer index:', normalizedAns);
             return res.status(400).json({ error: 'Invalid correct answer index' });
           }
         } else if (typeof normalizedAns === 'string') {
           if (!processedOptions.some(opt => String(opt).trim() === normalizedAns)) {
-            console.error('Invalid correct answer value:', normalizedAns, 'available options:', processedOptions);
+            console.log('📝 ADD QUESTION - Validation error: Invalid correct answer value:', normalizedAns);
             return res.status(400).json({ error: 'Invalid correct answer value' });
           }
         } else {
-          console.error('Invalid correct answer type:', typeof normalizedAns, 'value:', normalizedAns);
+          console.log('📝 ADD QUESTION - Validation error: Correct answers must be indices or option values');
           return res.status(400).json({ error: 'Correct answers must be indices or option values' });
         }
       }
 
-      // Store processed correct answer for later use
       correctAnswer = JSON.stringify(processedCorrectAnswer);
+      console.log('📝 ADD QUESTION - Final correctAnswer for multiple_answers:', correctAnswer);
+    }
+
+    if (questionType === 'image') {
+      console.log('📝 ADD QUESTION - Image validation: imageUrl =', imageUrl);
+      if (!imageUrl || imageUrl.trim() === '') {
+        console.log('📝 ADD QUESTION - Validation error: Image questions must have an image URL');
+        return res.status(400).json({ error: 'Image questions must have an image URL' });
+      }
+      try {
+        const url = new URL(imageUrl);
+        if (!['http:', 'https:'].includes(url.protocol)) {
+          console.log('📝 ADD QUESTION - Validation error: Image URL must be a valid HTTP/HTTPS URL');
+          return res.status(400).json({ error: 'Image URL must be a valid HTTP/HTTPS URL' });
+        }
+      } catch (error) {
+        console.log('📝 ADD QUESTION - Validation error: Invalid image URL format');
+        return res.status(400).json({ error: 'Invalid image URL format' });
+      }
+      if (!correctAnswer || correctAnswer.trim().length < 3) {
+        console.log('📝 ADD QUESTION - Validation error: Image questions must have a descriptive correct answer (at least 3 characters)');
+        return res.status(400).json({ error: 'Image questions must have a descriptive correct answer (at least 3 characters)' });
+      }
+    }
+
+    if (questionType === 'crossword') {
+      console.log('📝 ADD QUESTION - Crossword validation: crosswordGrid =', crosswordGrid, 'crosswordClues =', crosswordClues, 'crosswordSize =', crosswordSize);
+      if (!crosswordGrid || !crosswordClues || !crosswordSize) {
+        console.log('📝 ADD QUESTION - Validation error: Crossword questions must have grid, clues, and size');
+        return res.status(400).json({ error: 'Crossword questions must have grid, clues, and size' });
+      }
+      try {
+        const grid = JSON.parse(crosswordGrid);
+        if (!Array.isArray(grid) || grid.length === 0) {
+          console.log('📝 ADD QUESTION - Validation error: Crossword grid must be a non-empty array');
+          return res.status(400).json({ error: 'Crossword grid must be a non-empty array' });
+        }
+        const firstRow = grid[0];
+        if (!Array.isArray(firstRow)) {
+          console.log('📝 ADD QUESTION - Validation error: Crossword grid rows must be arrays');
+          return res.status(400).json({ error: 'Crossword grid rows must be arrays' });
+        }
+        const expectedCols = firstRow.length;
+        for (let i = 1; i < grid.length; i++) {
+          if (!Array.isArray(grid[i]) || grid[i].length !== expectedCols) {
+            console.log('📝 ADD QUESTION - Validation error: All crossword grid rows must have the same number of columns');
+            return res.status(400).json({ error: 'All crossword grid rows must have the same number of columns' });
+          }
+        }
+      } catch (error) {
+        console.log('📝 ADD QUESTION - Validation error: Invalid crossword grid format');
+        return res.status(400).json({ error: 'Invalid crossword grid format' });
+      }
+      try {
+        const clues = JSON.parse(crosswordClues);
+        if (typeof clues !== 'object' || clues === null) {
+          console.log('📝 ADD QUESTION - Validation error: Crossword clues must be a valid object');
+          return res.status(400).json({ error: 'Crossword clues must be a valid object' });
+        }
+      } catch (error) {
+        console.log('📝 ADD QUESTION - Validation error: Invalid crossword clues format');
+        return res.status(400).json({ error: 'Invalid crossword clues format' });
+      }
+      try {
+        const size = JSON.parse(crosswordSize);
+        if (typeof size !== 'object' || size === null || !size.rows || !size.cols) {
+          console.log('📝 ADD QUESTION - Validation error: Crossword size must be an object with rows and cols properties');
+          return res.status(400).json({ error: 'Crossword size must be an object with rows and cols properties' });
+        }
+        if (typeof size.rows !== 'number' || typeof size.cols !== 'number' || size.rows < 1 || size.cols < 1) {
+          console.log('📝 ADD QUESTION - Validation error: Crossword size rows and cols must be positive numbers');
+          return res.status(400).json({ error: 'Crossword size rows and cols must be positive numbers' });
+        }
+      } catch (error) {
+        console.log('📝 ADD QUESTION - Validation error: Invalid crossword size format');
+        return res.status(400).json({ error: 'Invalid crossword size format' });
+      }
     }
 
     if (questionType === 'code_snippet') {
+      console.log('📝 ADD QUESTION - Code snippet validation: evaluationMode =', evaluationMode, 'code_languages =', code_languages, 'testCases =', testCases);
       if (!evaluationMode) {
-        console.error('Validation error: Code questions must specify evaluation mode');
+        console.log('📝 ADD QUESTION - Validation error: Code questions must specify evaluation mode');
         return res.status(400).json({ error: 'Code questions must specify evaluation mode' });
       }
-
-      // Validate supported evaluation modes
       const validEvaluationModes = ['semantic', 'compiler', 'bugfix'];
       if (!validEvaluationModes.includes(evaluationMode)) {
+        console.log('📝 ADD QUESTION - Validation error: Invalid evaluation mode. Must be one of:', validEvaluationModes.join(', '));
         return res.status(400).json({ error: `Invalid evaluation mode. Must be one of: ${validEvaluationModes.join(', ')}` });
       }
-
-      // Validate code languages for code questions
       if (!code_languages || code_languages.trim() === '') {
+        console.log('📝 ADD QUESTION - Validation error: Code questions must specify supported languages');
         return res.status(400).json({ error: 'Code questions must specify supported languages' });
       }
       try {
         const languages = JSON.parse(code_languages);
         if (!Array.isArray(languages) || languages.length === 0) {
+          console.log('📝 ADD QUESTION - Validation error: Code languages must be a non-empty array');
           return res.status(400).json({ error: 'Code languages must be a non-empty array' });
         }
-        // Validate each language is supported
         const supportedLanguages = ['javascript', 'python', 'java', 'cpp'];
         for (const lang of languages) {
           if (!supportedLanguages.includes(lang)) {
+            console.log('📝 ADD QUESTION - Validation error: Unsupported language:', lang, '. Supported:', supportedLanguages.join(', '));
             return res.status(400).json({ error: `Unsupported language: ${lang}. Supported: ${supportedLanguages.join(', ')}` });
           }
         }
       } catch (error) {
-        return res.status(400).json({ error: 'Invalid code languages format - must be valid JSON array' });
+        console.log('📝 ADD QUESTION - Validation error: Invalid code languages format');
+        return res.status(400).json({ error: 'Invalid code languages format' });
       }
-
-      // Validate code timeout
       if (code_timeout != null) {
         const timeout = Number(code_timeout);
         if (isNaN(timeout) || timeout < 1 || timeout > 300) {
+          console.log('📝 ADD QUESTION - Validation error: Code timeout must be between 1 and 300 seconds');
           return res.status(400).json({ error: 'Code timeout must be between 1 and 300 seconds' });
         }
       }
-
-      // Validate code memory limit
       if (code_memory_limit != null) {
         const memoryLimit = Number(code_memory_limit);
         if (isNaN(memoryLimit) || memoryLimit < 32 || memoryLimit > 1024) {
+          console.log('📝 ADD QUESTION - Validation error: Code memory limit must be between 32MB and 1024MB');
           return res.status(400).json({ error: 'Code memory limit must be between 32MB and 1024MB' });
         }
       }
-
-      // Validate test cases for compiler/bugfix evaluation modes
+      if ((evaluationMode === 'compiler' || evaluationMode === 'bugfix') && (!testCases || testCases.trim() === '')) {
+        console.log('📝 ADD QUESTION - Validation error: Test cases are required for compiler/bugfix evaluation');
+        return res.status(400).json({ error: 'Test cases are required for compiler/bugfix evaluation' });
+      }
       if (evaluationMode === 'compiler' || evaluationMode === 'bugfix') {
-        if (!testCases || testCases.trim() === '') {
-          console.error('Validation error: Test cases are required for compiler/bugfix evaluation');
-          return res.status(400).json({ error: 'Test cases are required for compiler/bugfix evaluation' });
-        }
         try {
-          console.log('Parsing test cases:', testCases);
           const parsedTestCases = JSON.parse(testCases);
           if (!Array.isArray(parsedTestCases) || parsedTestCases.length === 0) {
+            console.log('📝 ADD QUESTION - Validation error: Test cases must be a non-empty array');
             return res.status(400).json({ error: 'Test cases must be a non-empty array' });
           }
-          // Validate test case structure
           for (const testCase of parsedTestCases) {
             if (!testCase.hasOwnProperty('input') || !testCase.hasOwnProperty('expectedOutput')) {
+              console.log('📝 ADD QUESTION - Validation error: Each test case must have input and expectedOutput properties');
               return res.status(400).json({ error: 'Each test case must have input and expectedOutput properties' });
             }
             if (typeof testCase.input !== 'string' || typeof testCase.expectedOutput !== 'string') {
+              console.log('📝 ADD QUESTION - Validation error: Test case input and expectedOutput must be strings');
               return res.status(400).json({ error: 'Test case input and expectedOutput must be strings' });
             }
           }
-        } catch (parseError) {
-          console.error('Validation error: Invalid test cases format', parseError);
-          return res.status(400).json({ error: 'Invalid test cases format - must be valid JSON array' });
+        } catch (error) {
+          console.log('📝 ADD QUESTION - Validation error: Invalid test cases format');
+          return res.status(400).json({ error: 'Invalid test cases format' });
         }
       }
-
-      // For semantic evaluation, correct answer should be the expected code
-      if (evaluationMode === 'semantic') {
-        if (!correctAnswer || correctAnswer.trim().length < 10) {
-          return res.status(400).json({ error: 'Semantic evaluation requires a correct code answer (at least 10 characters)' });
-        }
+      if (evaluationMode === 'semantic' && (!correctAnswer || correctAnswer.trim().length < 10)) {
+        console.log('📝 ADD QUESTION - Validation error: Semantic evaluation requires a correct code answer (at least 10 characters)');
+        return res.status(400).json({ error: 'Semantic evaluation requires a correct code answer (at least 10 characters)' });
       }
     }
 
-    // Validate marks and time limits with robust type checking
+    if (questionType === 'fill_blank' || questionType === 'short_answer') {
+      console.log('📝 ADD QUESTION - Fill blank/short answer validation: correctAnswer =', correctAnswer);
+      if (!correctAnswer || correctAnswer.trim() === '') {
+        console.log('📝 ADD QUESTION - Validation error:', `${questionType.replace('_', ' ')} questions must have a correct answer`);
+        return res.status(400).json({ error: `${questionType.replace('_', ' ')} questions must have a correct answer` });
+      }
+    }
+
+    // Validate marks and time limits
+    console.log('📝 ADD QUESTION - Validating marks and time limits: marks =', marks, 'timeLimit =', timeLimit);
     if (marks != null) {
       const numMarks = Number(marks);
       if (isNaN(numMarks) || numMarks < 0 || numMarks > 100) {
-        console.error('Validation error: Marks must be a number between 0 and 100, got:', marks, 'type:', typeof marks);
+        console.log('📝 ADD QUESTION - Validation error: Marks must be between 0 and 100');
         return res.status(400).json({ error: 'Marks must be between 0 and 100' });
       }
     }
-
     if (timeLimit != null) {
       const numTimeLimit = Number(timeLimit);
       if (isNaN(numTimeLimit) || numTimeLimit < 10 || numTimeLimit > 3600) {
-        console.error('Validation error: Time limit must be a number between 10 and 3600 seconds, got:', timeLimit, 'type:', typeof timeLimit);
+        console.log('📝 ADD QUESTION - Validation error: Time limit must be between 10 and 3600 seconds');
         return res.status(400).json({ error: 'Time limit must be between 10 and 3600 seconds' });
       }
     }
+    console.log('📝 ADD QUESTION - All validations passed, proceeding to database operations');
 
-    // Get current question count
-    const questionCount = await db.getAsync(
-      'SELECT COUNT(*) as count FROM questions WHERE game_id = $1',
-      [req.params.gameId]
-    );
+    // Start transaction
+    console.log('📝 ADD QUESTION - Starting database transaction...');
+    await db.runAsync('BEGIN TRANSACTION');
+    transactionStarted = true;
 
-    // Get existing question orders to validate sequential numbering
-    const existingOrders = await db.allAsync(
-      'SELECT question_order FROM questions WHERE game_id = $1 ORDER BY question_order',
-      [req.params.gameId]
-    );
-
-    console.log('🔍 QUESTION ORDER DEBUG - Current question count:', questionCount.count);
-    console.log('🔍 QUESTION ORDER DEBUG - Existing question orders:', existingOrders.map(q => q.question_order));
-    console.log('🔍 QUESTION ORDER DEBUG - Expected next order:', questionCount.count + 1);
-
-    // Check for gaps in ordering
-    const expectedOrders = Array.from({ length: questionCount.count }, (_, i) => i + 1);
-    const actualOrders = existingOrders.map(q => q.question_order);
-    const hasGaps = !expectedOrders.every(order => actualOrders.includes(order));
-
-    if (hasGaps) {
-      console.warn('⚠️ QUESTION ORDER WARNING - Gaps detected in question ordering!');
-      console.warn('⚠️ Expected sequential orders:', expectedOrders);
-      console.warn('⚠️ Actual orders:', actualOrders);
-
-      // FIX: Recalculate all question orders to be sequential
-      console.log('🔧 QUESTION ORDER FIX - Recalculating all question orders for game:', req.params.gameId);
-      const questionsToReorder = await db.allAsync(
-        'SELECT id FROM questions WHERE game_id = $1 ORDER BY question_order',
-        [req.params.gameId]
-      );
-
-      // Update each question with sequential order
-      for (let i = 0; i < questionsToReorder.length; i++) {
-        const newOrder = i + 1;
-        await db.runAsync(
-          'UPDATE questions SET question_order = $1 WHERE id = $2',
-          [newOrder, questionsToReorder[i].id]
-        );
-        console.log(`🔧 Updated question ${questionsToReorder[i].id} to order ${newOrder}`);
-      }
-
-      console.log('✅ QUESTION ORDER FIX - All question orders recalculated sequentially');
-    }
-
-    // Generate UUID for question id
-    const questionId = uuidv4();
-    console.log('Generated questionId:', questionId);
-
-    console.log('🔍 Backend - About to create insertParams');
-    console.log('🔍 Backend - processedOptions before stringify:', processedOptions);
-    console.log('🔍 Backend - processedOptions type:', typeof processedOptions, 'isArray:', Array.isArray(processedOptions));
-
-    // Ensure processedOptions is always an array before stringifying
-    const safeOptions = Array.isArray(processedOptions) ? processedOptions : [];
-    const optionsJson = JSON.stringify(safeOptions);
-    console.log('🔍 Backend - optionsJson:', optionsJson);
-
-    // Safely handle numeric parameters
-    const safeHintPenalty = hintPenalty != null ? Number(hintPenalty) : 10;
-    const safeTimeLimit = timeLimit != null ? Number(timeLimit) : 60;
-    const safeMarks = marks != null ? Number(marks) : 10;
-
-    // After potential reordering above, get the correct next order
+    // Get next question order atomically
+    console.log('📝 ADD QUESTION - Getting next question order...');
     const maxOrderResult = await db.getAsync(
       'SELECT MAX(question_order) as max_order FROM questions WHERE game_id = $1',
       [req.params.gameId]
     );
-
     const newQuestionOrder = (maxOrderResult?.max_order || 0) + 1;
-    console.log('🔍 QUESTION ORDER DEBUG - Max question order after reordering:', maxOrderResult?.max_order || 0);
-    console.log('🔍 QUESTION ORDER DEBUG - Assigning question_order:', newQuestionOrder);
+    console.log('📝 ADD QUESTION - New question order:', newQuestionOrder);
+
+    // Generate UUID for question id
+    const questionId = uuidv4();
+    console.log('📝 ADD QUESTION - Generated question ID:', questionId);
+
+    // Prepare insert parameters
+    console.log('📝 ADD QUESTION - Preparing insert parameters...');
+    const safeHintPenalty = hintPenalty != null ? Number(hintPenalty) : 10;
+    const safeTimeLimit = timeLimit != null ? Number(timeLimit) : 60;
+    const safeMarks = marks != null ? Number(marks) : 10;
+    console.log('📝 ADD QUESTION - Safe values: hintPenalty =', safeHintPenalty, 'timeLimit =', safeTimeLimit, 'marks =', safeMarks);
+
+    // Discover actual columns in questions table to handle legacy schemas (e.g., 'type', 'language', 'content')
+    const existingColumns = await db.allAsync(
+      `SELECT column_name, is_nullable, column_default
+       FROM information_schema.columns
+       WHERE table_name = 'questions'`
+    );
+    const existingColumnNames = new Set(existingColumns.map(c => c.column_name));
+
+    const columns = [
+      'id',
+      'game_id',
+      'question_order',
+      'question_text',
+      'question_type',
+      'options',
+      'correct_answer',
+      'hint',
+      'hint_penalty',
+      'time_limit',
+      'marks',
+      'difficulty',
+      'explanation',
+      'evaluation_mode',
+      'test_cases',
+      'ai_validation_settings',
+      'image_url',
+      'crossword_grid',
+      'crossword_clues',
+      'crossword_size',
+      'partial_marking_settings',
+      'time_decay_enabled',
+      'time_decay_factor',
+      'code_languages',
+      'code_timeout',
+      'code_memory_limit',
+      'code_template'
+    ];
 
     const insertParams = [
       questionId,
@@ -919,75 +941,121 @@ router.post('/:gameId/questions', authenticateToken, async (req, res) => {
       newQuestionOrder,
       questionText,
       questionType,
-      optionsJson,
+      JSON.stringify(processedOptions),
       correctAnswer,
       hint,
       safeHintPenalty,
       safeTimeLimit,
       safeMarks,
-      difficulty || 'medium',
-      explanation,
-      evaluationMode || 'mcq',
-      testCases || null,
-      aiValidationSettings || null,
-      imageUrl || null,
-      crosswordGrid ? JSON.stringify(crosswordGrid) : null,
-      crosswordClues ? JSON.stringify(crosswordClues) : null,
-      JSON.stringify(crosswordSize) || null,
+      (difficulty || 'medium'),
+      explanation || null,
+      (evaluationMode || 'mcq'),
+      (testCases && String(testCases).trim().length ? testCases : null),
+      (aiValidationSettings && String(aiValidationSettings).trim().length ? aiValidationSettings : null),
+      (imageUrl && String(imageUrl).trim().length ? imageUrl : null),
+      (crosswordGrid ? JSON.stringify(crosswordGrid) : null),
+      (crosswordClues ? JSON.stringify(crosswordClues) : null),
+      (crosswordSize ? JSON.stringify(crosswordSize) : null),
       null, // partial_marking_settings
-      timeDecayEnabled || false, // time_decay_enabled
-      timeDecayFactor || 0.1, // time_decay_factor
-      code_languages ? JSON.stringify(code_languages) : null,
-      code_timeout || 30,
-      code_memory_limit || 256,
-      code_template || null
+      Boolean(timeDecayEnabled) || false,
+      (typeof timeDecayFactor === 'number' ? timeDecayFactor : 0.1),
+      (code_languages ? JSON.stringify(code_languages) : null),
+      (code_timeout != null ? Number(code_timeout) : 30),
+      (code_memory_limit != null ? Number(code_memory_limit) : 256),
+      (code_template && String(code_template).trim().length ? code_template : null)
     ];
-    console.log('🔍 Backend - INSERT query params:', insertParams);
-    console.log('🔍 Backend - Options param (index 5):', insertParams[5]);
 
-    const result = await db.runAsync(
-      `INSERT INTO questions (id, game_id, question_order, question_text, question_type, options, correct_answer, hint, hint_penalty, time_limit, marks, difficulty, explanation, evaluation_mode, test_cases, ai_validation_settings, image_url, crossword_grid, crossword_clues, crossword_size, partial_marking_settings, time_decay_enabled, time_decay_factor, code_languages, code_timeout, code_memory_limit, code_template) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27)`,
+    // Include legacy/optional columns if they exist in DB
+    if (existingColumnNames.has('type')) {
+      columns.push('type');
+      insertParams.push(questionType);
+    }
+    if (existingColumnNames.has('language')) {
+      columns.push('language');
+      insertParams.push(req.body.codeLanguage || null);
+    }
+    if (existingColumnNames.has('content')) {
+      columns.push('content');
+      insertParams.push(questionText);
+    }
+    if (existingColumnNames.has('code_language')) {
+      columns.push('code_language');
+      insertParams.push(req.body.codeLanguage || null);
+    }
+    if (existingColumnNames.has('ide_language')) {
+      columns.push('ide_language');
+      insertParams.push(req.body.ideLanguage || null);
+    }
+
+    // Ensure any NOT NULL w/o default legacy columns are satisfied
+    const knownLegacyMappings = {
+      content: questionText,
+      type: questionType,
+      language: req.body.codeLanguage || null,
+      code_language: req.body.codeLanguage || null,
+      ide_language: req.body.ideLanguage || null,
+      title: questionText, // some schemas may use 'title' for question text
+      text: questionText
+    };
+
+    for (const col of existingColumns) {
+      const name = col.column_name;
+      const isNotNull = String(col.is_nullable).toLowerCase() === 'no';
+      const hasDefault = col.column_default != null;
+      if (isNotNull && !hasDefault && !columns.includes(name)) {
+        columns.push(name);
+        if (Object.prototype.hasOwnProperty.call(knownLegacyMappings, name)) {
+          insertParams.push(knownLegacyMappings[name] ?? '');
+        } else {
+          // Fallback to empty string to satisfy NOT NULL TEXT; booleans/numbers shouldn't appear here usually
+          insertParams.push('');
+        }
+      }
+    }
+
+    console.log('📝 ADD QUESTION - Insert params count:', insertParams.length, 'columns count:', columns.length);
+    console.log('📝 ADD QUESTION - Insert parameters prepared:', insertParams.map((param, index) => `param[${index}]: ${typeof param === 'string' && param.length > 50 ? param.substring(0, 50) + '...' : param}`).join(', '));
+    console.log('📝 ADD QUESTION - Columns used for insert:', columns.join(', '));
+
+    // Insert question
+    const placeholders = columns.map((_, i) => `$${i + 1}`).join(', ');
+    await db.runAsync(
+      `INSERT INTO questions (${columns.join(', ')}) VALUES (${placeholders})`,
       insertParams
     );
 
     // Update total questions in game
     await db.runAsync(
-      'UPDATE games SET total_questions = $1 WHERE id = $2',
-      [questionCount.count + 1, req.params.gameId]
+      'UPDATE games SET total_questions = total_questions + 1 WHERE id = $1',
+      [req.params.gameId]
     );
 
+    // Commit transaction
+    await db.runAsync('COMMIT');
+    transactionStarted = false;
+
+    // Retrieve and return the created question
     const question = await db.getAsync('SELECT * FROM questions WHERE id = $1', [questionId]);
 
     if (!question) {
-      console.error('Error: Question not found after insertion');
-      return res.status(500).json({ error: 'Failed to retrieve the created question' });
+      throw new Error('Failed to retrieve the created question');
     }
 
-    // Safely parse options from database response
+    // Parse fields for response
     let parsedOptions = [];
-    try {
-      if (Array.isArray(question.options)) {
-        parsedOptions = question.options;
-      } else if (typeof question.options === 'string') {
-        parsedOptions = JSON.parse(question.options || '[]');
-      } else {
-        parsedOptions = [];
-      }
-      // Ensure it's always an array
-      if (!Array.isArray(parsedOptions)) {
-        parsedOptions = [];
-      }
-    } catch (parseError) {
-      console.error('Error parsing question options from database:', parseError);
-      parsedOptions = [];
-    }
-
-    // Parse additional fields based on question type
     let parsedCrosswordGrid = null;
     let parsedCrosswordClues = null;
     let parsedCrosswordSize = null;
     let parsedTestCases = null;
     let parsedCodeLanguages = null;
+
+    try {
+      if (question.options) {
+        parsedOptions = JSON.parse(question.options);
+      }
+    } catch (error) {
+      console.error('Error parsing options:', error);
+    }
 
     try {
       if (question.crossword_grid) {
@@ -1040,11 +1108,18 @@ router.post('/:gameId/questions', authenticateToken, async (req, res) => {
     });
   } catch (error) {
     console.error('Add question error:', error);
-    // Provide more specific error messages based on error type
+
+    // Rollback transaction if started
+    if (transactionStarted) {
+      try {
+        await db.runAsync('ROLLBACK');
+      } catch (rollbackError) {
+        console.error('Error rolling back transaction:', rollbackError);
+      }
+    }
+
     if (error.code === 'SQLITE_CONSTRAINT') {
       return res.status(400).json({ error: 'Database constraint violation - check your input data' });
-    } else if (error.message && error.message.includes('validation')) {
-      return res.status(400).json({ error: error.message });
     } else {
       return res.status(500).json({ error: 'Failed to add question' });
     }
@@ -1093,16 +1168,23 @@ router.put('/:gameId/questions/:questionId', authenticateToken, async (req, res)
       crosswordClues,
       crosswordSize,
       timeDecayEnabled,
-      timeDecayFactor
+      timeDecayFactor,
+      code_languages,
+      timeoutLimit: code_timeout,
+      memoryLimit: code_memory_limit,
+      code_template
     } = req.body;
 
     // Use a mutable variable for correctAnswer processing
     let correctAnswer = initialCorrectAnswer;
 
     // Validate required fields
+    console.log('📝 ADD QUESTION - Validating required fields...');
     if (!questionText || !questionType) {
+      console.log('📝 ADD QUESTION - Validation error: Question text and type are required');
       return res.status(400).json({ error: 'Question text and type are required' });
     }
+    console.log('📝 ADD QUESTION - Required fields validation passed');
 
     console.log('🔍 Backend - PUT - About to process options');
     console.log('🔍 Backend - PUT - Raw options:', options);
@@ -1283,8 +1365,9 @@ router.put('/:gameId/questions/:questionId', authenticateToken, async (req, res)
         hint = $5, hint_penalty = $6, time_limit = $7, marks = $8, difficulty = $9, explanation = $10,
         evaluation_mode = $11, test_cases = $12, ai_validation_settings = $13, image_url = $14,
         crossword_grid = $15, crossword_clues = $16, crossword_size = $17,
-        partial_marking_settings = $18, time_decay_enabled = $19, time_decay_factor = $20
-        WHERE id = $21 AND game_id = $22`,
+        partial_marking_settings = $18, time_decay_enabled = $19, time_decay_factor = $20,
+        code_languages = $21, code_timeout = $22, code_memory_limit = $23, code_template = $24
+        WHERE id = $25 AND game_id = $26`,
       [
         questionText, questionType, JSON.stringify(processedOptions), correctAnswer,
         hint, hintPenalty, timeLimit, marks, difficulty, explanation,
@@ -1295,6 +1378,10 @@ router.put('/:gameId/questions/:questionId', authenticateToken, async (req, res)
         null, // partial_marking_settings
         timeDecayEnabled || false, // time_decay_enabled
         timeDecayFactor || 0.1, // time_decay_factor
+        code_languages ? JSON.stringify(code_languages) : null,
+        code_timeout || 30,
+        code_memory_limit || 256,
+        code_template || null,
         req.params.questionId, req.params.gameId
       ]
     );
@@ -1391,8 +1478,11 @@ router.delete('/:gameId/questions/:questionId', authenticateToken, async (req, r
     }
 
     // Verify game exists and user has access
+    console.log('📝 ADD QUESTION - Verifying game access...');
     const game = await db.getAsync('SELECT id FROM games WHERE id = $1 AND organizer_id = $2', [req.params.gameId, req.user.id]);
+    console.log('📝 ADD QUESTION - Game verification result:', game ? 'Game found' : 'Game not found');
     if (!game) {
+      console.log('📝 ADD QUESTION - ERROR: Game not found or access denied');
       return res.status(404).json({ error: 'Game not found or access denied' });
     }
 

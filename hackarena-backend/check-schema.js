@@ -18,13 +18,13 @@ const pool = new Pool({
   connectionTimeoutMillis: 10000,
 });
 
-async function checkAnswersTableSchema() {
+async function checkQuestionsTableSchema() {
   try {
-    console.log('Checking answers table schema...');
+    console.log('Checking questions table schema...');
 
     const client = await pool.connect();
     try {
-      // Query information_schema for columns in answers table
+      // Query information_schema for columns in questions table
       const columnsQuery = `
         SELECT
           column_name,
@@ -35,13 +35,13 @@ async function checkAnswersTableSchema() {
           numeric_precision,
           numeric_scale
         FROM information_schema.columns
-        WHERE table_name = 'answers'
+        WHERE table_name = 'questions'
         AND table_schema = 'public'
         ORDER BY ordinal_position;
       `;
 
       const columnsResult = await client.query(columnsQuery);
-      console.log('\n📋 Columns in answers table:');
+      console.log('\n📋 Columns in questions table:');
       console.table(columnsResult.rows);
 
       // Query for constraints
@@ -57,13 +57,32 @@ async function checkAnswersTableSchema() {
           AND tc.table_schema = kcu.table_schema
         LEFT JOIN information_schema.check_constraints cc
           ON tc.constraint_name = cc.constraint_name
-        WHERE tc.table_name = 'answers'
+        WHERE tc.table_name = 'questions'
         AND tc.table_schema = 'public';
       `;
 
       const constraintsResult = await client.query(constraintsQuery);
-      console.log('\n🔒 Constraints on answers table:');
+      console.log('\n🔒 Constraints on questions table:');
       console.table(constraintsResult.rows);
+
+      // Check if question_type is an enum and list enum values
+      const enumQuery = `
+        SELECT
+          t.typname AS enum_name,
+          e.enumlabel AS enum_value
+        FROM pg_type t
+        JOIN pg_enum e ON t.oid = e.enumtypid
+        WHERE t.typname = 'question_type_enum'
+        ORDER BY e.enumsortorder;
+      `;
+
+      const enumResult = await client.query(enumQuery);
+      if (enumResult.rows.length > 0) {
+        console.log('\n📝 Question type enum values:');
+        console.table(enumResult.rows);
+      } else {
+        console.log('\n📝 No question_type_enum found - using TEXT type');
+      }
 
     } finally {
       client.release();
@@ -78,4 +97,4 @@ async function checkAnswersTableSchema() {
   }
 }
 
-checkAnswersTableSchema();
+checkQuestionsTableSchema();

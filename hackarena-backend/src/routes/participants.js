@@ -47,7 +47,6 @@ function calculatePartialScore(userAnswer, correctAnswer, questionType, partialS
 
     return 0;
   } catch (error) {
-    console.error('Error calculating partial score:', error);
     return 0;
   }
 }
@@ -62,7 +61,6 @@ async function evaluateCodeSemantic(userCode, correctCode, aiSettings, language 
   try {
     // Rate limiting check for semantic analysis
     if (userId && !CodeExecutionService.rateLimiter.isAllowed(userId)) {
-      console.warn('Rate limit exceeded for semantic analysis, user:', userId);
       return false;
     }
 
@@ -76,7 +74,6 @@ async function evaluateCodeSemantic(userCode, correctCode, aiSettings, language 
     return semanticScore >= 6;
 
   } catch (error) {
-    console.error('Error in semantic evaluation:', error);
     // Fallback to basic checks
     const userCodeNormalized = userCode.toLowerCase().trim();
     const correctCodeNormalized = correctCode.toLowerCase().trim();
@@ -121,7 +118,6 @@ async function evaluateCodeWithTestCases(userCode, testCasesJson, correctCode, l
     return passRate >= 0.8;
 
   } catch (error) {
-    console.error('Error executing test cases:', error);
     return false;
   }
 }
@@ -162,7 +158,6 @@ function evaluateCrosswordAnswer(userAnswer, crosswordGrid, crosswordClues, cros
     return correctCount >= totalClues * 0.8;
 
   } catch (error) {
-    console.error('Error validating crossword:', error);
     return false;
   }
 }
@@ -250,7 +245,6 @@ router.post('/join', async (req, res) => {
       gameCode: game.game_code
     });
   } catch (error) {
-    console.error('Join game error:', error);
     res.status(500).json({ error: 'Failed to join game' });
   }
 });
@@ -260,7 +254,6 @@ router.post('/rejoin', authenticateParticipant, async (req, res) => {
   try {
     const participant = req.participant;
 
-    console.log('🔄 Rejoin request for participant:', participant.id, 'game:', participant.game_id);
 
     const game = await db.getAsync(
       'SELECT * FROM games WHERE id = $1',
@@ -268,11 +261,8 @@ router.post('/rejoin', authenticateParticipant, async (req, res) => {
     );
 
     if (!game) {
-      console.log('❌ Game not found for rejoin:', participant.game_id);
       return res.status(404).json({ error: 'Game not found' });
     }
-
-    console.log('📊 Game status during rejoin:', game.status);
 
     // Get current game state
     let currentQuestion = null;
@@ -285,10 +275,8 @@ router.post('/rejoin', authenticateParticipant, async (req, res) => {
         [game.id]
       );
 
-      console.log('🎯 Game session found:', !!session);
       if (session) {
         answersRevealed = session.answers_revealed;
-        console.log('🔍 Answers revealed status:', answersRevealed);
 
         // Always send current question for active games, regardless of reveal status
         // Check if participant already answered this question
@@ -297,13 +285,11 @@ router.post('/rejoin', authenticateParticipant, async (req, res) => {
           [participant.id, session.current_question_id]
         );
 
-        console.log('📝 Participant already answered:', !!existingAnswer);
 
         // CRITICAL FIX: Always send current question for active games to ensure participants
         // who rejoin during an active question immediately receive it, regardless of answer status
         // Only skip if answers are revealed AND participant has already answered
         if (!answersRevealed || !existingAnswer) {
-          console.log('✅ Sending current question to participant (rejoin during active game)');
 
           // Safe JSON parsing for question options (handles arrays, JSON strings, and comma-separated strings)
           let parsedOptions = [];
@@ -320,35 +306,26 @@ router.post('/rejoin', authenticateParticipant, async (req, res) => {
                   parsedOptions = session.options.split(',').map(opt => opt.trim()).filter(opt => opt.length > 0);
                 }
               } else {
-                console.warn('⚠️ session.options is neither array nor string:', typeof session.options);
                 parsedOptions = [];
               }
             }
           } catch (parseError) {
             // If JSON parsing fails, treat as comma-separated string
-            console.warn('⚠️ Failed to parse question options as JSON, treating as comma-separated string:', parseError.message);
             if (typeof session.options === 'string') {
               parsedOptions = session.options.split(',').map(opt => opt.trim()).filter(opt => opt.length > 0);
             } else {
-              console.warn('⚠️ session.options is not a string after JSON parse failure:', typeof session.options);
               parsedOptions = [];
             }
           }
 
-          console.log('🔍 Parsed options for rejoin:', parsedOptions, 'length:', parsedOptions.length);
 
           currentQuestion = {
             ...session,
             options: parsedOptions
           };
         } else {
-          console.log('⏳ Answers revealed and participant already answered, not resending question');
         }
-      } else {
-        console.log('❌ No active session found for game:', game.id);
       }
-    } else {
-      console.log('⏸️ Game not active, status:', game.status);
     }
 
     const responseData = {
@@ -366,16 +343,9 @@ router.post('/rejoin', authenticateParticipant, async (req, res) => {
       gameCode: game.game_code
     };
 
-    console.log('📤 Rejoin response data:', {
-      gameStatus: game.status,
-      hasCurrentQuestion: !!currentQuestion,
-      answersRevealed,
-      participantId: participant.id
-    });
 
     res.json(responseData);
   } catch (error) {
-    console.error('❌ Rejoin game error:', error);
     res.status(500).json({ error: 'Failed to rejoin game' });
   }
 });
@@ -383,18 +353,12 @@ router.post('/rejoin', authenticateParticipant, async (req, res) => {
 // Submit answer
 router.post('/answer', authenticateParticipant, async (req, res) => {
   try {
-    console.log('🔍 DEBUG: Received answer submission:', req.body);
-    console.log('🔍 DEBUG: Participant:', req.participant?.id);
-    console.log('🔍 DEBUG: Headers:', req.headers);
-    console.log('🔍 DEBUG: Session token present:', !!req.headers['x-session-token']);
 
     let { questionId, answer, hintUsed, timeTaken, autoSubmit } = req.body;
 
-    console.log('🔍 DEBUG: Destructured values:', { questionId, answer: answer?.substring(0, 100), hintUsed, timeTaken, autoSubmit });
 
     // Security: Validate input size and content
     if (answer && answer.length > 10000) {
-      console.log('🔍 DEBUG: Answer too large, rejecting');
       return res.status(400).json({ error: 'Answer too large' });
     }
 
@@ -417,7 +381,6 @@ router.post('/answer', authenticateParticipant, async (req, res) => {
         }
       }
     }
-    console.log('🔍 DEBUG: Destructured autoSubmit value:', autoSubmit, 'Type:', typeof autoSubmit);
     const participant = req.participant;
 
     // Validate required fields - allow null answer for auto-submitted responses

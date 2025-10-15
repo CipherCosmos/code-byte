@@ -11,6 +11,19 @@ import participantRoutes from './routes/participants.js';
 import analyticsRoutes from './routes/analytics.js';
 import { setupSocketHandlers } from './socket/socketHandlers.js';
 
+// Configure logging level globally before any logs
+const envLogLevel = process.env.LOG_LEVEL || (process.env.NODE_ENV === 'production' ? 'error' : 'info');
+if (envLogLevel === 'error') {
+  console.debug = () => {};
+  console.info = () => {};
+  console.log = () => {};
+} else if (envLogLevel === 'silent') {
+  console.debug = () => {};
+  console.info = () => {};
+  console.log = () => {};
+  console.warn = () => {};
+}
+
 const __dirname = path.dirname(new URL(import.meta.url).pathname);
 
 // Load environment variables with diagnostic logging
@@ -106,7 +119,7 @@ app.get('/api/health', (req, res) => {
 // Socket.IO Setup
 setupSocketHandlers(io);
 
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 10000;
 server.listen(PORT, () => {
   console.log(`HackArena Backend running on port ${PORT}`);
 });
