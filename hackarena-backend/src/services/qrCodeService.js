@@ -19,7 +19,7 @@ export async function generateAndUploadQRCode(gameCode) {
     console.log('🎯 Generating QR code for game:', gameCode);
 
     // Generate join URL
-    const joinUrl = `${process.env.FRONTEND_URL}/join/${gameCode}`;
+    const joinUrl = `https://code-byte-eta.vercel.app/join/${gameCode}`;
     console.log('🎯 Join URL:', joinUrl);
 
     // Generate QR code as buffer
