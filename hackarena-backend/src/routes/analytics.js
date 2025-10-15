@@ -49,12 +49,6 @@ router.get('/games/:gameId/overview', authenticateToken, async (req, res) => {
     const correctAnswers = answers.filter(a => a.is_correct).length;
     const overallAccuracy = totalAnswers > 0 ? (correctAnswers / totalAnswers) * 100 : 0;
 
-    // Calculate overall statistics
-    const totalParticipants = participants.length;
-    const totalQuestions = questions.length;
-    const totalAnswers = answers.length;
-    const correctAnswers = answers.filter(a => a.is_correct).length;
-    const overallAccuracy = totalAnswers > 0 ? (correctAnswers / totalAnswers) * 100 : 0;
 
     // Average completion time
     const answeredQuestions = answers.length;
@@ -69,23 +63,14 @@ router.get('/games/:gameId/overview', authenticateToken, async (req, res) => {
       return acc;
     }, {});
 
-    // Score distribution
-    const scoreDistribution = participants.reduce((acc, p) => {
-      const range = Math.floor(p.total_score / 50) * 50;
-      acc[range] = (acc[range] || 0) + 1;
-      return acc;
-    }, {});
 
     // Game duration
     let gameDuration = null;
     if (game.started_at && game.ended_at) {
       gameDuration = (new Date(game.ended_at) - new Date(game.started_at)) / 1000 / 60; // minutes
-      console.log('📊 ANALYTICS OVERVIEW - Game duration:', gameDuration, 'minutes');
-    } else {
-      console.log('📊 ANALYTICS OVERVIEW - Game duration: Not available (missing start/end times)');
     }
 
-    console.log('📊 ANALYTICS OVERVIEW - Preparing response data...');
+    // Prepare response data
     const responseData = {
       game: {
         id: game.id,
@@ -114,8 +99,6 @@ router.get('/games/:gameId/overview', authenticateToken, async (req, res) => {
       }
     };
 
-    console.log('📊 ANALYTICS OVERVIEW - Response data prepared successfully');
-    console.log('📊 ANALYTICS OVERVIEW - Request completed successfully');
     res.json(responseData);
   } catch (error) {
     console.error('📊 ANALYTICS OVERVIEW - ERROR occurred:', error);
@@ -450,22 +433,15 @@ router.get('/games/:gameId/export/csv', authenticateToken, async (req, res) => {
 // Export game results as PDF
 router.get('/games/:gameId/export/pdf', authenticateToken, async (req, res) => {
   try {
-    console.log('📊 PDF EXPORT - Request received');
-    console.log('📊 PDF EXPORT - gameId:', req.params.gameId);
-    console.log('📊 PDF EXPORT - user.id:', req.user.id);
-
-    console.log('📊 PDF EXPORT - Fetching game details...');
     const game = await db.getAsync(
       'SELECT * FROM games WHERE id = $1 AND organizer_id = $2',
       [req.params.gameId, req.user.id]
     );
-    console.log('📊 PDF EXPORT - Game query result:', game ? 'Found' : 'Not found');
 
     if (!game) {
       return res.status(404).json({ error: 'Game not found' });
     }
 
-    console.log('📊 PDF EXPORT - Fetching participants...');
     // Get participant data
     const participants = await db.allAsync(
       `SELECT p.*,
@@ -480,9 +456,7 @@ router.get('/games/:gameId/export/pdf', authenticateToken, async (req, res) => {
         ORDER BY p.total_score DESC, p.joined_at ASC`,
       [req.params.gameId, 'active']
     );
-    console.log('📊 PDF EXPORT - Participants found:', participants.length);
 
-    console.log('📊 PDF EXPORT - Fetching questions...');
     // Get question performance data
     const questions = await db.allAsync(
       `SELECT q.*,
@@ -497,25 +471,20 @@ router.get('/games/:gameId/export/pdf', authenticateToken, async (req, res) => {
         ORDER BY q.question_order`,
       [req.params.gameId]
     );
-    console.log('📊 PDF EXPORT - Questions found:', questions.length);
 
-    console.log('📊 PDF EXPORT - Calculating overall statistics...');
     // Get overall statistics
     const totalParticipants = participants.length;
     const totalQuestions = questions.length;
     const totalAnswers = questions.reduce((sum, q) => sum + q.total_attempts, 0);
     const correctAnswers = questions.reduce((sum, q) => sum + q.correct_attempts, 0);
     const overallAccuracy = totalAnswers > 0 ? (correctAnswers / totalAnswers) * 100 : 0;
-    console.log('📊 PDF EXPORT - Overall stats calculated:', { totalParticipants, totalQuestions, totalAnswers, correctAnswers, overallAccuracy });
 
-    console.log('📊 PDF EXPORT - Creating PDF document...');
     // Create PDF document
     const doc = new PDFDocument();
     const buffers = [];
 
     doc.on('data', buffers.push.bind(buffers));
     doc.on('end', () => {
-      console.log('📊 PDF EXPORT - PDF generation completed, sending response...');
       const pdfData = Buffer.concat(buffers);
       res.setHeader('Content-Type', 'application/pdf');
       res.setHeader('Content-Disposition', `attachment; filename="${game.title.replace(/[^a-zA-Z0-9]/g, '_')}_results.pdf"`);
@@ -623,9 +592,7 @@ router.get('/games/:gameId/export/pdf', authenticateToken, async (req, res) => {
       yPosition += 25; // More space for questions
     });
 
-    console.log('📊 PDF EXPORT - Finalizing PDF document...');
     doc.end();
-    console.log('📊 PDF EXPORT - Request completed successfully');
 
   } catch (error) {
     console.error('📊 PDF EXPORT - ERROR occurred:', error);
