@@ -1,4 +1,4 @@
-# HackArena Backend - Render Deployment Guide
+# Code Byte Backend - Render Deployment Guide
 
 ## 🚀 Deployment Checklist
 
@@ -20,7 +20,7 @@ Set these in Render dashboard under Service Settings > Environment:
 **Required:**
 - [ ] `DATABASE_URL` - PostgreSQL connection string
 - [ ] `JWT_SECRET` - Strong random string (min 32 characters)
-- [ ] `FRONTEND_URL` - Your frontend application URL (e.g., `https://hackarena-frontend.onrender.com`)
+- [ ] `FRONTEND_URL` - Your frontend application URL (e.g., `https://codebyte-frontend.onrender.com`)
 
 **Optional but Recommended:**
 - [ ] `CLOUDINARY_CLOUD_NAME` - For file uploads

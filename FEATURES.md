@@ -1,6 +1,6 @@
-# HackArena Features Documentation
+# Code Byte Features Documentation
 
-Comprehensive documentation of all features implemented in HackArena.
+Comprehensive documentation of all features implemented in Code Byte.
 
 ## Table of Contents
 

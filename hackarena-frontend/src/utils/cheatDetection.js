@@ -60,7 +60,6 @@ class CheatDetectionManager {
     // Suspicious behavior monitoring
     this.startSuspiciousBehaviorMonitoring()
 
-    console.log('Enhanced cheat detection monitoring started')
   }
 
   stopMonitoring() {
@@ -87,7 +86,6 @@ class CheatDetectionManager {
       clearInterval(this.behaviorInterval)
     }
 
-    console.log('Enhanced cheat detection monitoring stopped')
   }
 
   handleContextMenu = (e) => {
@@ -459,7 +457,9 @@ class CheatDetectionManager {
         sessionDuration: Date.now() - (this.sessionStartTime || Date.now()),
         userAgent: navigator.userAgent,
         screenResolution: `${screen.width}x${screen.height}`,
-        windowSize: `${window.innerWidth}x${window.innerHeight}`
+        windowSize: `${window.innerWidth}x${window.innerHeight}`,
+        severity: this.getCheatSeverity(type),
+        frequency: this.getCheatFrequency(type)
       }
 
       // Log to console with different severity levels

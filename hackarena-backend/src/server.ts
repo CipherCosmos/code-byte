@@ -88,7 +88,7 @@ app.use('/api/analytics', analyticsRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'OK', message: 'HackArena Backend is running' });
+  res.json({ status: 'OK', message: 'Code Byte Backend is running' });
 });
 
 // Socket.IO Setup

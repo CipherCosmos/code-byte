@@ -1,6 +1,6 @@
-# HackArena Troubleshooting Guide
+# Code Byte Troubleshooting Guide
 
-Comprehensive troubleshooting guide for common issues and problems in HackArena.
+Comprehensive troubleshooting guide for common issues and problems in Code Byte.
 
 ## Table of Contents
 
@@ -174,7 +174,7 @@ SQLITE_CANTOPEN: unable to open database file
 4. Check file permissions:
    ```bash
    chmod 755 database/
-   chmod 644 database/hackarena.db
+   chmod 644 database/codebyte.db
    ```
 
 #### Database Corruption
@@ -188,12 +188,12 @@ SQLITE_CORRUPT: database disk image is malformed
 **Solutions:**
 1. Backup current database (if possible):
    ```bash
-   cp database/hackarena.db database/hackarena.db.backup
+   cp database/codebyte.db database/codebyte.db.backup
    ```
 
 2. Delete corrupted database:
    ```bash
-   rm database/hackarena.db
+   rm database/codebyte.db
    ```
 
 3. Reinitialize database:
@@ -390,7 +390,7 @@ WebSocket connection failed
 **Solutions:**
 1. Check PM2 logs:
    ```bash
-   pm2 logs hackarena-backend
+   pm2 logs codebyte-backend
    ```
 
 2. Verify ecosystem file syntax:
@@ -464,7 +464,7 @@ WebSocket connection failed
 1. Ensure database files are outside web root
 2. Use proper file permissions:
    ```bash
-   chmod 600 database/hackarena.db
+   chmod 600 database/codebyte.db
    ```
 
 3. Implement database access controls
@@ -556,10 +556,10 @@ npm install
 #### "Database locked"
 ```bash
 # Check for other processes accessing database
-lsof database/hackarena.db
+lsof database/codebyte.db
 
 # Ensure proper file permissions
-chmod 644 database/hackarena.db
+chmod 644 database/codebyte.db
 ```
 
 ### Frontend Errors
@@ -594,10 +594,10 @@ import Component from './Component.jsx'
 #### PM2 Logging
 ```bash
 # View logs
-pm2 logs hackarena-backend
+pm2 logs codebyte-backend
 
 # Monitor in real-time
-pm2 logs hackarena-backend --lines 100
+pm2 logs codebyte-backend --lines 100
 
 # Clear logs
 pm2 flush
@@ -628,11 +628,11 @@ netstat -tlnp
 #### Database Monitoring
 ```bash
 # SQLite statistics
-sqlite3 database/hackarena.db ".stats on"
+sqlite3 database/codebyte.db ".stats on"
 .schema
 
 # Query performance
-sqlite3 database/hackarena.db ".timer on"
+sqlite3 database/codebyte.db ".timer on"
 EXPLAIN QUERY PLAN SELECT * FROM participants;
 ```
 

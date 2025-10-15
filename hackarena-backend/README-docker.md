@@ -1,6 +1,6 @@
-# HackArena Backend - Docker Development Setup
+# Code Byte Backend - Docker Development Setup
 
-This guide explains how to run the HackArena backend locally using Docker Compose for development.
+This guide explains how to run the Code Byte backend locally using Docker Compose for development.
 
 ## Prerequisites
 
@@ -11,7 +11,7 @@ This guide explains how to run the HackArena backend locally using Docker Compos
 
 1. **Clone the repository and navigate to the backend directory:**
    ```bash
-   cd hackarena-backend
+   cd codebyte-backend
    ```
 
 2. **Copy the local environment file:**
@@ -46,9 +46,9 @@ This guide explains how to run the HackArena backend locally using Docker Compos
 ### PostgreSQL Database
 - **Image:** postgres:15-alpine
 - **Port:** 5432
-- **Database:** hackarena_db
-- **User:** hackarena
-- **Password:** hackarena_password
+- **Database:** codebyte_db
+- **User:** codebyte
+- **Password:** codebyte_password
 - **Volume:** Persistent data storage
 - **Init Script:** Automatically runs database initialization
 
@@ -70,7 +70,7 @@ docker-compose down
 ### Database Management
 ```bash
 # Connect to database
-docker-compose exec db psql -U hackarena -d hackarena_db
+docker-compose exec db psql -U codebyte -d codebyte_db
 
 # Reset database (removes all data)
 docker-compose down -v
@@ -86,7 +86,7 @@ docker-compose up --build
 Key environment variables for local development:
 
 - `NODE_ENV=development`
-- `DATABASE_URL=postgresql://hackarena:hackarena_password@db:5432/hackarena_db`
+- `DATABASE_URL=postgresql://codebyte:codebyte_password@db:5432/codebyte_db`
 - `JWT_SECRET=dev-jwt-secret-change-in-production`
 - `FRONTEND_URL=http://localhost:3000`
 
@@ -135,7 +135,7 @@ For production deployment, use the existing `render.yaml` or modify the Dockerfi
 ## File Structure
 
 ```
-hackarena-backend/
+codebyte-backend/
 ├── docker-compose.yml      # Docker Compose configuration
 ├── Dockerfile             # Multi-stage build for production
 ├── .env.local            # Local development environment variables

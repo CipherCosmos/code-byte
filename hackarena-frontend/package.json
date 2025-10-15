@@ -1,7 +1,7 @@
 {
   "name": "hackarena-frontend",
   "version": "1.0.0",
-  "description": "HackArena Frontend - Inter-College Hackathon Game Management System",
+  "description": "Code Byte Frontend - Inter-College Hackathon Game Management System",
   "type": "module",
   "scripts": {
     "dev": "vite",

@@ -104,8 +104,8 @@ const GameAnalytics = () => {
               <ArrowLeft className="h-5 w-5" />
             </Link>
             <div>
-              <h1 className="text-xl font-bold text-gray-900">{game.title} - DSBA Analytics</h1>
-              <p className="text-sm text-gray-600">DSBA Game Code: {game.game_code}</p>
+              <h1 className="text-xl font-bold text-gray-900">{game.title} - Code Byte Analytics</h1>
+              <p className="text-sm text-gray-600">Code Byte Game Code: {game.game_code}</p>
             </div>
           </div>
           <div className="flex items-center space-x-4">

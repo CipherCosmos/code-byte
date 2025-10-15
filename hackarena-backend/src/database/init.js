@@ -50,22 +50,17 @@ const db = {
 
 export async function initializeDatabase() {
   try {
-    console.log('Starting database initialization...');
-    console.log('🔍 Checking database connection...');
     // Test database connection
     await db.getAsync('SELECT 1');
-    console.log('✅ Database connection successful');
 
     // Check if users table exists and has correct schema before dropping
     try {
-      console.log('Checking users table schema...');
       const tableExists = await db.getAsync(`
         SELECT EXISTS (
           SELECT 1 FROM information_schema.tables
           WHERE table_name = 'users'
         )
       `);
-      console.log('Users table exists:', tableExists.exists);
 
       if (tableExists.exists) {
         // Check if schema matches expected structure
@@ -75,7 +70,6 @@ export async function initializeDatabase() {
           WHERE table_name = 'users'
           ORDER BY column_name
         `);
-        console.log('Current users table columns:', columns);
 
         // Expected columns: id (uuid), email (text), password (text), name (text), google_id (text), created_at (timestamp)
         const expectedColumns = ['id', 'email', 'password', 'name', 'google_id', 'created_at'];
@@ -84,28 +78,16 @@ export async function initializeDatabase() {
         const schemaMatches = expectedColumns.every(col => currentColumns.includes(col)) &&
                              currentColumns.every(col => expectedColumns.includes(col));
 
-        console.log('Schema matches expected:', schemaMatches);
-
         if (!schemaMatches) {
-          console.log('Schema mismatch detected, dropping and recreating users table...');
           await db.runAsync(`DROP TABLE IF EXISTS users CASCADE`);
-          console.log('Existing users table dropped due to schema mismatch.');
-        } else {
-          console.log('Users table schema is correct, skipping drop.');
         }
-      } else {
-        console.log('Users table does not exist, will create it.');
       }
     } catch (error) {
-      console.log('Error checking users table schema:', error.message);
       // If we can't check, assume we need to drop and recreate
-      console.log('Dropping users table as fallback...');
       await db.runAsync(`DROP TABLE IF EXISTS users CASCADE`);
-      console.log('Existing users table dropped as fallback.');
     }
 
     // Users table
-    console.log('Creating users table with correct schema...');
     await db.runAsync(`
       CREATE TABLE IF NOT EXISTS users (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -116,7 +98,6 @@ export async function initializeDatabase() {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
-    console.log('Users table created successfully with correct schema.');
 
     // Games table
     await db.runAsync(`
@@ -553,9 +534,7 @@ export async function initializeDatabase() {
       )
     `);
 
-    console.log('Database initialized successfully');
   } catch (error) {
-    console.error('Database initialization error:', error);
     throw error;
   }
 }

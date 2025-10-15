@@ -17,16 +17,9 @@ const pool = new Pool({
 
 pool.connect()
   .then(() => {
-    console.log('✅ Database connected successfully');
   })
   .catch((error) => {
     console.error('❌ Database connection failed:', error.message);
-    console.error('❌ Connection details:', {
-      host: process.env.DATABASE_HOST,
-      port: process.env.DATABASE_PORT,
-      database: process.env.DATABASE_NAME,
-      ssl: true,
-    });
     process.exit(1); // Exit the process if the database connection fails
   });
 

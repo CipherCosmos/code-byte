@@ -325,11 +325,6 @@ router.get('/:gameId', authenticateToken, async (req, res) => {
       joinUrl
     });
   } catch (error) {
-    console.error('❌ GET /api/games/:gameId - Error occurred:');
-    console.error('   - Error message:', error.message);
-    console.error('   - Error stack:', error.stack);
-    console.error('   - Error code:', error.code);
-    console.error('   - Error details:', error);
     res.status(500).json({ error: 'Failed to fetch game details' });
   }
 });
@@ -695,29 +690,24 @@ router.post('/:gameId/questions', authenticateToken, async (req, res) => {
     }
 
     if (questionType === 'code_snippet') {
-      console.log('📝 ADD QUESTION - Code snippet validation: evaluationMode =', evaluationMode, 'code_languages =', code_languages, 'testCases =', testCases);
       // evaluationMode ensured above
       const validEvaluationModes = ['semantic', 'compiler', 'bugfix'];
       if (!validEvaluationModes.includes(evaluationMode)) {
-        console.log('📝 ADD QUESTION - Validation error: Invalid evaluation mode. Must be one of:', validEvaluationModes.join(', '));
         return res.status(400).json({ error: `Invalid evaluation mode. Must be one of: ${validEvaluationModes.join(', ')}` });
       }
       // code_languages ensured above
       try {
         const languages = JSON.parse(code_languages);
         if (!Array.isArray(languages) || languages.length === 0) {
-          console.log('📝 ADD QUESTION - Validation error: Code languages must be a non-empty array');
           return res.status(400).json({ error: 'Code languages must be a non-empty array' });
         }
         const supportedLanguages = ['javascript', 'python', 'java', 'cpp'];
         for (const lang of languages) {
           if (!supportedLanguages.includes(lang)) {
-            console.log('📝 ADD QUESTION - Validation error: Unsupported language:', lang, '. Supported:', supportedLanguages.join(', '));
             return res.status(400).json({ error: `Unsupported language: ${lang}. Supported: ${supportedLanguages.join(', ')}` });
           }
         }
       } catch (error) {
-        console.log('📝 ADD QUESTION - Validation error: Invalid code languages format');
         return res.status(400).json({ error: 'Invalid code languages format' });
       }
       if (code_timeout != null) {
@@ -730,38 +720,31 @@ router.post('/:gameId/questions', authenticateToken, async (req, res) => {
       if (code_memory_limit != null) {
         const memoryLimit = Number(code_memory_limit);
         if (isNaN(memoryLimit) || memoryLimit < 32 || memoryLimit > 1024) {
-          console.log('📝 ADD QUESTION - Validation error: Code memory limit must be between 32MB and 1024MB');
           return res.status(400).json({ error: 'Code memory limit must be between 32MB and 1024MB' });
         }
       }
       if ((evaluationMode === 'compiler' || evaluationMode === 'bugfix') && (!testCases || testCases.trim() === '')) {
-        console.log('📝 ADD QUESTION - Validation error: Test cases are required for compiler/bugfix evaluation');
         return res.status(400).json({ error: 'Test cases are required for compiler/bugfix evaluation' });
       }
       if (evaluationMode === 'compiler' || evaluationMode === 'bugfix') {
         try {
           const parsedTestCases = JSON.parse(testCases);
           if (!Array.isArray(parsedTestCases) || parsedTestCases.length === 0) {
-            console.log('📝 ADD QUESTION - Validation error: Test cases must be a non-empty array');
             return res.status(400).json({ error: 'Test cases must be a non-empty array' });
           }
           for (const testCase of parsedTestCases) {
             if (!testCase.hasOwnProperty('input') || !testCase.hasOwnProperty('expectedOutput')) {
-              console.log('📝 ADD QUESTION - Validation error: Each test case must have input and expectedOutput properties');
               return res.status(400).json({ error: 'Each test case must have input and expectedOutput properties' });
             }
             if (typeof testCase.input !== 'string' || typeof testCase.expectedOutput !== 'string') {
-              console.log('📝 ADD QUESTION - Validation error: Test case input and expectedOutput must be strings');
               return res.status(400).json({ error: 'Test case input and expectedOutput must be strings' });
             }
           }
         } catch (error) {
-          console.log('📝 ADD QUESTION - Validation error: Invalid test cases format');
           return res.status(400).json({ error: 'Invalid test cases format' });
         }
       }
       if (evaluationMode === 'semantic' && (!correctAnswer || correctAnswer.trim().length < 10)) {
-        console.log('📝 ADD QUESTION - Validation error: Semantic evaluation requires a correct code answer (at least 10 characters)');
         return res.status(400).json({ error: 'Semantic evaluation requires a correct code answer (at least 10 characters)' });
       }
     }
@@ -1080,12 +1063,9 @@ router.put('/:gameId/questions/:questionId', authenticateToken, async (req, res)
     let correctAnswer = initialCorrectAnswer;
 
     // Validate required fields
-    console.log('📝 ADD QUESTION - Validating required fields...');
     if (!questionText || !questionType) {
-      console.log('📝 ADD QUESTION - Validation error: Question text and type are required');
       return res.status(400).json({ error: 'Question text and type are required' });
     }
-    console.log('📝 ADD QUESTION - Required fields validation passed');
 
 
     // Handle options - robust processing with error handling for PUT
@@ -1138,7 +1118,6 @@ router.put('/:gameId/questions/:questionId', authenticateToken, async (req, res)
     if (questionType === 'multiple_answers') {
 
       if (!Array.isArray(processedOptions) || processedOptions.length < 2) {
-        console.error('Validation error: Multiple answers questions must have at least 2 options');
         return res.status(400).json({ error: 'Multiple answers questions must have at least 2 options' });
       }
 
@@ -1147,10 +1126,8 @@ router.put('/:gameId/questions/:questionId', authenticateToken, async (req, res)
       if (typeof correctAnswer === 'string') {
         try {
           processedCorrectAnswer = JSON.parse(correctAnswer);
-          console.log('🔍 Backend - parsed correctAnswer from JSON:', processedCorrectAnswer);
         } catch {
           processedCorrectAnswer = [correctAnswer];
-          console.log('🔍 Backend - converted correctAnswer to array:', processedCorrectAnswer);
         }
       }
 
@@ -1161,7 +1138,6 @@ router.put('/:gameId/questions/:questionId', authenticateToken, async (req, res)
 
       // Validate that correct answers are valid indices or values
       for (const ans of processedCorrectAnswer) {
-        console.log('🔍 Backend - validating answer:', ans, 'type:', typeof ans);
         if (typeof ans === 'number') {
           if (ans < 0 || ans >= processedOptions.length) {
             return res.status(400).json({ error: 'Invalid correct answer index' });
@@ -1185,20 +1161,15 @@ router.put('/:gameId/questions/:questionId', authenticateToken, async (req, res)
 
     // Validate test cases for code questions
     if (questionType === 'code_snippet' && (evaluationMode === 'compiler' || evaluationMode === 'bugfix')) {
-      console.log('🔍 UPDATE QUESTION - testCases type:', typeof testCases);
-      console.log('🔍 UPDATE QUESTION - testCases value:', testCases);
       try {
         let parsedTestCases;
         if (typeof testCases === 'string') {
           try {
             parsedTestCases = JSON.parse(testCases);
-            console.log('🔍 UPDATE QUESTION - testCases parsed as JSON');
           } catch {
-            console.log('🔍 UPDATE QUESTION - testCases not valid JSON, converting comma-separated to array');
             // Convert comma-separated string to array format
             const parts = testCases.split(',').map(part => part.trim()).filter(part => part.length > 0);
             parsedTestCases = parts.map(part => ({ input: part, expectedOutput: '', description: '' }));
-            console.log('🔍 UPDATE QUESTION - parsedTestCases after conversion:', parsedTestCases);
           }
         } else if (Array.isArray(testCases)) {
           parsedTestCases = testCases;
@@ -1424,7 +1395,6 @@ router.post('/:gameId/start', authenticateToken, async (req, res) => {
 
     // Input validation
     if (!req.params.gameId) {
-      console.log('🎮 START GAME - ERROR: Game ID is required');
       return res.status(400).json({ error: 'Game ID is required' });
     }
 
@@ -1432,7 +1402,6 @@ router.post('/:gameId/start', authenticateToken, async (req, res) => {
     const game = await db.getAsync('SELECT * FROM games WHERE id = $1 AND organizer_id = $2', [req.params.gameId, req.user.id]);
 
     if (!game) {
-      console.log('🎮 START GAME - ERROR: Game not found or access denied');
       return res.status(404).json({ error: 'Game not found or access denied' });
     }
 
@@ -1606,11 +1575,6 @@ router.post('/:gameId/start', authenticateToken, async (req, res) => {
     }
     res.json({ message: 'Game started successfully' });
   } catch (error) {
-    console.error('🎮 START GAME - ERROR occurred:', error);
-    console.error('🎮 START GAME - Error message:', error.message);
-    console.error('🎮 START GAME - Error stack:', error.stack);
-    console.error('🎮 START GAME - Error code:', error.code);
-    console.error('🎮 START GAME - Error details:', error);
     res.status(500).json({ error: 'Failed to start game' });
   }
 });
@@ -1782,11 +1746,6 @@ router.post('/:gameId/next-question', authenticateToken, async (req, res) => {
 
     res.json({ message: 'Next question started' });
   } catch (error) {
-    console.error('🎯 NEXT QUESTION - ERROR occurred:', error);
-    console.error('🎯 NEXT QUESTION - Error message:', error.message);
-    console.error('🎯 NEXT QUESTION - Error stack:', error.stack);
-    console.error('🎯 NEXT QUESTION - Error code:', error.code);
-    console.error('🎯 NEXT QUESTION - Error details:', error);
     res.status(500).json({ error: 'Failed to start next question' });
   }
 });
@@ -1858,11 +1817,6 @@ router.post('/:gameId/reveal-answer', authenticateToken, async (req, res) => {
 
     res.json({ message: 'Answer revealed successfully' });
   } catch (error) {
-    console.error('👁️ REVEAL ANSWER - ERROR occurred:', error);
-    console.error('👁️ REVEAL ANSWER - Error message:', error.message);
-    console.error('👁️ REVEAL ANSWER - Error stack:', error.stack);
-    console.error('👁️ REVEAL ANSWER - Error code:', error.code);
-    console.error('👁️ REVEAL ANSWER - Error details:', error);
     res.status(500).json({ error: 'Failed to reveal answer' });
   }
 });

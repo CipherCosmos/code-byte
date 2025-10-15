@@ -44,9 +44,12 @@ const GameControl = () => {
   const [socket, setSocket] = useState(null)
   const [isPaused, setIsPaused] = useState(false)
   const [eliminatedParticipants, setEliminatedParticipants] = useState([])
+  const [flaggedParticipants, setFlaggedParticipants] = useState([])
+  const [cheatStats, setCheatStats] = useState(null)
 
   useEffect(() => {
     fetchGameDetails()
+    fetchFlaggedParticipants()
     
     // Setup socket connection
     const socketConnection = socketManager.connect()
@@ -107,6 +110,9 @@ const GameControl = () => {
       const eliminated = response.data.participants?.filter(p => p.status === 'eliminated') || []
       setEliminatedParticipants(eliminated)
 
+      // Fetch flagged participants and cheat stats
+      fetchFlaggedParticipants()
+
       // Fetch analytics if game is completed
       if (response.data.status === 'completed') {
         try {
@@ -121,6 +127,16 @@ const GameControl = () => {
       toast.error('Failed to load game details')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const fetchFlaggedParticipants = async () => {
+    try {
+      const response = await api.get(`/participants/flagged/${gameId}`)
+      setFlaggedParticipants(response.data.flaggedParticipants || [])
+      setCheatStats(response.data.cheatStats || null)
+    } catch (error) {
+      console.error('Failed to fetch flagged participants:', error)
     }
   }
 
@@ -270,9 +286,34 @@ const GameControl = () => {
       socket?.emit('reAdmitParticipant', { participantId, gameId })
       toast.success('Participant re-admitted successfully')
       fetchGameDetails()
+      fetchFlaggedParticipants()
     } catch (error) {
       console.error('Failed to re-admit participant:', error)
       toast.error('Failed to re-admit participant')
+    }
+  }
+
+  const applyPenalty = async (participantId, currentScore = 0) => {
+    const penaltyPoints = prompt(`Enter penalty points (current score: ${currentScore}):`, '10')
+    if (penaltyPoints === null) return
+
+    const reason = prompt('Enter reason for penalty:', 'Anti-cheat violation')
+    if (reason === null) return
+
+    try {
+      await api.post(`/participants/penalty/${participantId}`, {
+        penaltyType: 'manual',
+        penaltyPoints: parseInt(penaltyPoints) || 10,
+        reason: reason,
+        organizerId: game.organizer_id
+      })
+      
+      toast.success(`Penalty of ${penaltyPoints} points applied`)
+      fetchGameDetails()
+      fetchFlaggedParticipants()
+    } catch (error) {
+      console.error('Failed to apply penalty:', error)
+      toast.error('Failed to apply penalty')
     }
   }
 
@@ -298,7 +339,6 @@ const GameControl = () => {
 
   const currentQuestion = getCurrentQuestion()
   const activeParticipants = game.participants?.filter(p => p.status === 'active') || []
-  const flaggedParticipants = game.participants?.filter(p => p.status === 'flagged') || []
   const eliminatedParticipantsList = game.participants?.filter(p => p.status === 'eliminated') || []
 
   return (
@@ -308,7 +348,7 @@ const GameControl = () => {
         <div className="flex justify-between items-center mb-6">
           <div className="flex items-center space-x-4">
             <Link to="/dashboard" className="text-gray-600 hover:text-gray-900">
-              ← DSBA Dashboard
+              ← Code Byte Dashboard
             </Link>
             <h1 className="text-xl font-bold text-gray-900">{game.title}</h1>
             <span className={`px-3 py-1 text-sm rounded-full ${
@@ -638,6 +678,92 @@ const GameControl = () => {
               </div>
             </div>
 
+            {/* Flagged Participants - Anti-Cheat Monitoring */}
+            {flaggedParticipants.length > 0 && (
+              <div className="card p-6 border-l-4 border-red-500">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-semibold text-red-800 flex items-center">
+                    <AlertTriangle className="h-5 w-5 mr-2" />
+                    Flagged Participants ({flaggedParticipants.length})
+                  </h3>
+                  {cheatStats && (
+                    <div className="text-sm text-gray-600">
+                      <span className="bg-red-100 text-red-800 px-2 py-1 rounded">
+                        {cheatStats.critical_count || 0} Critical
+                      </span>
+                      <span className="bg-orange-100 text-orange-800 px-2 py-1 rounded ml-2">
+                        {cheatStats.high_risk_count || 0} High Risk
+                      </span>
+                    </div>
+                  )}
+                </div>
+                <div className="space-y-3 max-h-64 overflow-y-auto">
+                  {flaggedParticipants.map(participant => (
+                    <div key={participant.id} className={`p-3 rounded-lg border ${
+                      participant.risk_level === 'CRITICAL' ? 'bg-red-50 border-red-200' :
+                      participant.risk_level === 'HIGH' ? 'bg-orange-50 border-orange-200' :
+                      participant.risk_level === 'MEDIUM' ? 'bg-yellow-50 border-yellow-200' :
+                      'bg-gray-50 border-gray-200'
+                    }`}>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-3">
+                          <span className="text-lg">{participant.avatar}</span>
+                          <div>
+                            <p className="font-medium text-gray-900">{participant.name}</p>
+                            <div className="flex items-center space-x-2 text-sm">
+                              <span className={`px-2 py-1 rounded text-xs font-medium ${
+                                participant.risk_level === 'CRITICAL' ? 'bg-red-100 text-red-800' :
+                                participant.risk_level === 'HIGH' ? 'bg-orange-100 text-orange-800' :
+                                participant.risk_level === 'MEDIUM' ? 'bg-yellow-100 text-yellow-800' :
+                                'bg-gray-100 text-gray-800'
+                              }`}>
+                                {participant.risk_level} RISK
+                              </span>
+                              <span className="text-gray-600">
+                                Score: {participant.total_score} • Cheat Score: {participant.cheat_score}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center space-x-1">
+                          <button
+                            onClick={() => applyPenalty(participant.id, participant.total_score)}
+                            className="text-red-600 hover:text-red-800 p-1"
+                            title="Apply penalty"
+                          >
+                            <Target className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() => eliminateParticipant(participant.id)}
+                            className="text-red-600 hover:text-red-800 p-1"
+                            title="Eliminate participant"
+                          >
+                            <UserX className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </div>
+                      {participant.cheat_events && participant.cheat_events.length > 0 && (
+                        <div className="mt-2 text-xs text-gray-600">
+                          <details>
+                            <summary className="cursor-pointer hover:text-gray-800">
+                              Recent violations ({participant.cheat_events.length})
+                            </summary>
+                            <div className="mt-1 space-y-1 max-h-20 overflow-y-auto">
+                              {participant.cheat_events.slice(-3).map((event, idx) => (
+                                <div key={idx} className="text-xs bg-white/50 p-1 rounded">
+                                  {event.type}: {event.description}
+                                </div>
+                              ))}
+                            </div>
+                          </details>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* All Participants */}
             <div className="card p-6">
               <h3 className="text-lg font-semibold mb-4">
@@ -645,22 +771,39 @@ const GameControl = () => {
               </h3>
               <div className="space-y-2 max-h-80 overflow-y-auto">
                 {activeParticipants.map(participant => (
-                  <div key={participant.id} className="flex items-center justify-between p-2 rounded hover:bg-gray-50">
+                  <div key={participant.id} className={`flex items-center justify-between p-2 rounded hover:bg-gray-50 ${
+                    participant.cheat_warnings > 0 ? 'border-l-4 border-orange-400 bg-orange-50/30' : ''
+                  }`}>
                     <div className="flex items-center space-x-2">
                       <span className="text-lg">{participant.avatar}</span>
                       <div>
-                        <p className="font-medium text-gray-900">{participant.name}</p>
+                        <div className="flex items-center space-x-2">
+                          <p className="font-medium text-gray-900">{participant.name}</p>
+                          {participant.cheat_warnings > 0 && (
+                            <AlertTriangle className="h-4 w-4 text-orange-500" />
+                          )}
+                        </div>
                         <p className="text-sm text-gray-600">
                           Rank #{participant.current_rank} • {participant.total_score} pts
+                          {participant.cheat_warnings > 0 && (
+                            <span className="text-orange-600 ml-2">({participant.cheat_warnings} warnings)</span>
+                          )}
                         </p>
                       </div>
                     </div>
                     <div className="flex items-center space-x-1">
                       {participant.cheat_warnings > 0 && (
-                        <span className="text-xs bg-red-100 text-red-800 px-2 py-1 rounded">
+                        <span className="text-xs bg-orange-100 text-orange-800 px-2 py-1 rounded">
                           {participant.cheat_warnings} warns
                         </span>
                       )}
+                      <button
+                        onClick={() => applyPenalty(participant.id, participant.total_score)}
+                        className="text-blue-600 hover:text-blue-800 p-1"
+                        title="Apply penalty"
+                      >
+                        <Target className="h-4 w-4" />
+                      </button>
                       <button
                         onClick={() => warnParticipant(participant.id)}
                         className="text-yellow-600 hover:text-yellow-800 p-1"

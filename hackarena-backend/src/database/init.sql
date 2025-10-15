@@ -1,4 +1,4 @@
--- HackArena Database Initialization Script
+-- Code Byte Database Initialization Script
 -- This script creates all necessary tables and initial data for local development
 
 -- Enable UUID extension

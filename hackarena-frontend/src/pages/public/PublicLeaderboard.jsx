@@ -7,7 +7,6 @@ import LoadingSpinner from '../../components/LoadingSpinner'
 import Footer from '../../components/Footer'
 
 const PublicLeaderboard = () => {
-  console.log('PublicLeaderboard component rendered')
   const { gameCode } = useParams()
   const [leaderboard, setLeaderboard] = useState([])
   const [gameInfo, setGameInfo] = useState(null)
@@ -92,11 +91,11 @@ const PublicLeaderboard = () => {
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4">
               <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center">
-                <img src="/dsba-logo.svg" alt="DSBA Logo" className="h-6 w-auto" />
+                <img src="https://res.cloudinary.com/ddhdndela/image/upload/v1760560511/generated_image_guxl9c.png" alt="DSBA Logo" className="h-6 w-auto" />
               </div>
               <div>
-                <h1 className="text-2xl font-bold">DSBA Live Leaderboard</h1>
-                <p className="text-blue-100">DSBA Game Code: {gameCode}</p>
+                <h1 className="text-2xl font-bold">Code Byte Live Leaderboard</h1>
+                <p className="text-blue-100">Code Byte Game Code: {gameCode}</p>
               </div>
             </div>
 

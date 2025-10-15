@@ -1,6 +1,6 @@
-# HackArena Deployment Guide
+# Code Byte Deployment Guide
 
-Complete deployment instructions for HackArena backend and frontend applications.
+Complete deployment instructions for Code Byte backend and frontend applications.
 
 ## Table of Contents
 
@@ -54,7 +54,7 @@ Complete deployment instructions for HackArena backend and frontend applications
 1. **Clone and Install**
 ```bash
 git clone <repository-url>
-cd hackarena-backend
+cd codebyte-backend
 npm install
 ```
 
@@ -96,7 +96,7 @@ npm start
 1. **Clone and Install**
 ```bash
 git clone <repository-url>
-cd hackarena-frontend
+cd codebyte-frontend
 npm install
 ```
 
@@ -117,7 +117,7 @@ npm run dev
 1. **Backend Health Check**
 ```bash
 curl http://localhost:3001/api/health
-# Should return: {"status":"OK","message":"HackArena Backend is running"}
+# Should return: {"status":"OK","message":"Code Byte Backend is running"}
 ```
 
 2. **Frontend Access**
@@ -143,15 +143,15 @@ sudo apt-get install -y nodejs
 sudo npm install -g pm2
 
 # Create application directory
-sudo mkdir -p /var/www/hackarena-backend
-sudo chown -R $USER:$USER /var/www/hackarena-backend
+sudo mkdir -p /var/www/codebyte-backend
+sudo chown -R $USER:$USER /var/www/codebyte-backend
 ```
 
 #### 2. Application Deployment
 
 ```bash
 # Clone repository
-cd /var/www/hackarena-backend
+cd /var/www/codebyte-backend
 git clone <repository-url> .
 npm ci --only=production
 
@@ -177,7 +177,7 @@ nano ecosystem.config.js
 ```javascript
 module.exports = {
   apps: [{
-    name: 'hackarena-backend',
+    name: 'codebyte-backend',
     script: 'src/server.js',
     instances: 1,
     autorestart: true,
@@ -214,7 +214,7 @@ sudo env PATH=$PATH:/usr/bin /usr/lib/node_modules/pm2/bin/pm2 startup systemd -
 sudo apt install nginx
 
 # Create Nginx configuration
-sudo nano /etc/nginx/sites-available/hackarena-backend
+sudo nano /etc/nginx/sites-available/codebyte-backend
 ```
 
 ```nginx
@@ -237,7 +237,7 @@ server {
 
     # Static files
     location /uploads/ {
-        alias /var/www/hackarena-backend/uploads/;
+        alias /var/www/codebyte-backend/uploads/;
         expires 30d;
         add_header Cache-Control "public, immutable";
     }
@@ -246,7 +246,7 @@ server {
 
 ```bash
 # Enable site
-sudo ln -s /etc/nginx/sites-available/hackarena-backend /etc/nginx/sites-enabled/
+sudo ln -s /etc/nginx/sites-available/codebyte-backend /etc/nginx/sites-enabled/
 
 # Test configuration
 sudo nginx -t
@@ -260,7 +260,7 @@ sudo systemctl restart nginx
 #### 1. Build Process
 
 ```bash
-cd hackarena-frontend
+cd codebyte-frontend
 npm ci
 npm run build
 ```
@@ -269,26 +269,26 @@ npm run build
 
 ```bash
 # Create frontend directory
-sudo mkdir -p /var/www/hackarena-frontend
+sudo mkdir -p /var/www/codebyte-frontend
 
 # Copy build files
-cp -r dist/* /var/www/hackarena-frontend/
+cp -r dist/* /var/www/codebyte-frontend/
 
 # Set permissions
-sudo chown -R www-data:www-data /var/www/hackarena-frontend
+sudo chown -R www-data:www-data /var/www/codebyte-frontend
 ```
 
 #### 3. Nginx Configuration for Frontend
 
 ```bash
-sudo nano /etc/nginx/sites-available/hackarena-frontend
+sudo nano /etc/nginx/sites-available/codebyte-frontend
 ```
 
 ```nginx
 server {
     listen 80;
     server_name your-frontend-domain.com;
-    root /var/www/hackarena-frontend;
+    root /var/www/codebyte-frontend;
     index index.html;
 
     # Handle client-side routing
@@ -321,26 +321,26 @@ Create `docker-compose.yml`:
 version: '3.8'
 
 services:
-  hackarena-backend:
+  codebyte-backend:
     build:
-      context: ./hackarena-backend
+      context: ./codebyte-backend
       dockerfile: Dockerfile
     ports:
       - "3001:3001"
     environment:
       - NODE_ENV=production
       - PORT=3001
-      - DATABASE_URL=/app/database/hackarena.db
+      - DATABASE_URL=/app/database/codebyte.db
     volumes:
-      - ./hackarena-backend/uploads:/app/uploads
-      - ./hackarena-backend/database:/app/database
+      - ./codebyte-backend/uploads:/app/uploads
+      - ./codebyte-backend/database:/app/database
     restart: unless-stopped
     depends_on:
       - postgres
 
-  hackarena-frontend:
+  codebyte-frontend:
     build:
-      context: ./hackarena-frontend
+      context: ./codebyte-frontend
       dockerfile: Dockerfile
     ports:
       - "80:80"
@@ -349,8 +349,8 @@ services:
   postgres:
     image: postgres:15
     environment:
-      - POSTGRES_DB=hackarena
-      - POSTGRES_USER=hackarena
+      - POSTGRES_DB=codebyte
+      - POSTGRES_USER=codebyte
       - POSTGRES_PASSWORD=secure_password
     volumes:
       - postgres_data:/var/lib/postgresql/data
@@ -364,8 +364,8 @@ services:
       - ./nginx.conf:/etc/nginx/nginx.conf
       - ./ssl:/etc/ssl/certs
     depends_on:
-      - hackarena-backend
-      - hackarena-frontend
+      - codebyte-backend
+      - codebyte-frontend
     restart: unless-stopped
 
 volumes:
@@ -391,7 +391,7 @@ RUN mkdir -p uploads
 
 # Create non-root user
 RUN addgroup -g 1001 -S nodejs
-RUN adduser -S hackarena -u 1001
+RUN adduser -S codebyte -u 1001
 
 # Set permissions
 RUN chown -R hackarena:nodejs /app
@@ -463,8 +463,8 @@ sudo apt install certbot python3-certbot-nginx
 4. **Application Deployment**
 ```bash
 # Clone and setup as described in production deployment
-git clone <repository-url> /var/www/hackarena-backend
-cd /var/www/hackarena-backend
+git clone <repository-url> /var/www/codebyte-backend
+cd /var/www/codebyte-backend
 npm ci --only=production
 npm run migrate
 ```
@@ -482,19 +482,19 @@ sudo certbot --nginx -d your-domain.com
 # cloudbuild.yaml
 steps:
   - name: 'gcr.io/cloud-builders/docker'
-    args: ['build', '-t', 'gcr.io/$PROJECT_ID/hackarena-backend', './hackarena-backend']
+    args: ['build', '-t', 'gcr.io/$PROJECT_ID/codebyte-backend', './codebyte-backend']
 
   - name: 'gcr.io/cloud-builders/docker'
-    args: ['push', 'gcr.io/$PROJECT_ID/hackarena-backend']
+    args: ['push', 'gcr.io/$PROJECT_ID/codebyte-backend']
 
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: gcloud
     args:
       - 'run'
       - 'deploy'
-      - 'hackarena-backend'
+      - 'codebyte-backend'
       - '--image'
-      - 'gcr.io/$PROJECT_ID/hackarena-backend'
+      - 'gcr.io/$PROJECT_ID/codebyte-backend'
       - '--platform'
       - 'managed'
       - '--port'
@@ -523,7 +523,7 @@ NODE_ENV=production
 PORT=3001
 
 # Database
-DATABASE_URL=/app/database/hackarena.db
+DATABASE_URL=/app/database/codebyte.db
 # Or for PostgreSQL:
 # DATABASE_URL=postgresql://user:password@host:port/database
 
@@ -560,7 +560,7 @@ VITE_API_BASE_URL=https://your-backend-domain.com/api
 VITE_GOOGLE_CLIENT_ID=your-google-client-id
 
 # Application
-VITE_APP_NAME=HackArena
+VITE_APP_NAME=Code Byte
 VITE_APP_VERSION=1.0.0
 ```
 
@@ -613,7 +613,7 @@ server {
 pm2 monit
 
 # PM2 logs
-pm2 logs hackarena-backend
+pm2 logs codebyte-backend
 
 # System monitoring
 htop
@@ -651,17 +651,17 @@ curl https://your-domain.com/api/health
 # SQLite backup (daily cron job)
 #!/bin/bash
 DATE=$(date +%Y%m%d_%H%M%S)
-sqlite3 /var/www/hackarena-backend/database/hackarena.db ".backup /var/backups/hackarena_$DATE.db"
+sqlite3 /var/www/codebyte-backend/database/codebyte.db ".backup /var/backups/codebyte_$DATE.db"
 
 # PostgreSQL backup
-pg_dump hackarena > /var/backups/hackarena_$DATE.sql
+pg_dump codebyte > /var/backups/codebyte_$DATE.sql
 ```
 
 ### File Backup
 
 ```bash
 # Uploads directory backup
-rsync -av /var/www/hackarena-backend/uploads /var/backups/
+rsync -av /var/www/codebyte-backend/uploads /var/backups/
 
 # Compress old backups
 find /var/backups -name "*.db" -mtime +30 -exec gzip {} \;
@@ -671,19 +671,19 @@ find /var/backups -name "*.db" -mtime +30 -exec gzip {} \;
 
 ```bash
 #!/bin/bash
-# /usr/local/bin/backup-hackarena.sh
+# /usr/local/bin/backup-codebyte.sh
 
-BACKUP_DIR="/var/backups/hackarena"
+BACKUP_DIR="/var/backups/codebyte"
 DATE=$(date +%Y%m%d_%H%M%S)
 
 # Create backup directory
 mkdir -p $BACKUP_DIR
 
 # Database backup
-sqlite3 /var/www/hackarena-backend/database/hackarena.db ".backup $BACKUP_DIR/database_$DATE.db"
+sqlite3 /var/www/codebyte-backend/database/codebyte.db ".backup $BACKUP_DIR/database_$DATE.db"
 
 # Files backup
-tar -czf $BACKUP_DIR/uploads_$DATE.tar.gz /var/www/hackarena-backend/uploads/
+tar -czf $BACKUP_DIR/uploads_$DATE.tar.gz /var/www/codebyte-backend/uploads/
 
 # Clean old backups (keep last 7 days)
 find $BACKUP_DIR -name "*.db" -mtime +7 -delete
@@ -698,7 +698,7 @@ echo "Backup completed: $DATE"
 
 1. **Load Balancer Setup**
 ```nginx
-upstream hackarena_backend {
+upstream codebyte_backend {
     server backend1:3001;
     server backend2:3001;
     server backend3:3001;
@@ -709,7 +709,7 @@ server {
     server_name api.your-domain.com;
 
     location / {
-        proxy_pass http://hackarena_backend;
+        proxy_pass http://codebyte_backend;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
@@ -768,7 +768,7 @@ npm install redis
 #### Backend Not Starting
 ```bash
 # Check logs
-pm2 logs hackarena-backend
+pm2 logs codebyte-backend
 
 # Check environment variables
 cat .env
@@ -790,7 +790,7 @@ cat .env
 #### Database Connection Issues
 ```bash
 # Test SQLite connection
-sqlite3 database/hackarena.db "SELECT 1;"
+sqlite3 database/codebyte.db "SELECT 1;"
 
 # Check file permissions
 ls -la database/
@@ -813,7 +813,7 @@ sudo certbot renew
 pm2 monit
 
 # Restart application
-pm2 restart hackarena-backend
+pm2 restart codebyte-backend
 ```
 
 2. **Slow Response Times**
@@ -823,7 +823,7 @@ top
 df -h
 
 # Check database performance
-sqlite3 database/hackarena.db ".stats on"
+sqlite3 database/codebyte.db ".stats on"
 ```
 
 3. **High CPU Usage**

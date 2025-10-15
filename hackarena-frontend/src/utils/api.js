@@ -42,7 +42,6 @@ api.interceptors.response.use(
 
     // Handle network errors with retry logic
     if (!error.response && error.code === 'NETWORK_ERROR') {
-      console.warn('Network error detected, attempting retry...')
 
       // Implement exponential backoff retry
       if (!originalRequest._retryCount) {
@@ -53,7 +52,6 @@ api.interceptors.response.use(
         originalRequest._retryCount++
         const delay = Math.pow(2, originalRequest._retryCount) * 1000 // 2s, 4s, 8s
 
-        console.log(`Retrying request (${originalRequest._retryCount}/3) in ${delay}ms`)
 
         return new Promise(resolve => {
           setTimeout(() => resolve(api(originalRequest)), delay)
@@ -71,7 +69,6 @@ api.interceptors.response.use(
         originalRequest._retryCount++
         const delay = 2000 * originalRequest._retryCount
 
-        console.log(`Retrying server error (${originalRequest._retryCount}/2) in ${delay}ms`)
 
         return new Promise(resolve => {
           setTimeout(() => resolve(api(originalRequest)), delay)

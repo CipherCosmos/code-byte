@@ -35,6 +35,21 @@ export class Participant {
   @Column('int', { default: 0 })
   cheat_warnings: number;
 
+  @Column('int', { default: 0 })
+  cheat_score: number;
+
+  @Column('jsonb', { nullable: true })
+  cheat_events: any;
+
+  @Column('boolean', { default: false })
+  is_flagged: boolean;
+
+  @Column('timestamp', { nullable: true })
+  last_cheat_detection: Date;
+
+  @Column('text', { default: 'active' })
+  game_status: string;
+
   @CreateDateColumn()
   joined_at: Date;
 

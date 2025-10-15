@@ -29,14 +29,12 @@ class SocketManager {
     })
 
     this.socket.on('connect', () => {
-      console.log('Socket connected:', this.socket.id)
       this.reconnectAttempts = 0
       this.isReconnecting = false
       this.notifyListeners('connected')
     })
 
     this.socket.on('disconnect', (reason) => {
-      console.log('Socket disconnected:', reason)
       this.notifyListeners('disconnected', reason)
 
       if (reason === 'io server disconnect' || reason === 'io client disconnect') {
@@ -55,13 +53,11 @@ class SocketManager {
     })
 
     this.socket.on('reconnect_attempt', (attempt) => {
-      console.log(`Reconnection attempt ${attempt}/${this.maxReconnectAttempts}`)
       this.isReconnecting = true
       this.notifyListeners('reconnecting', attempt)
     })
 
     this.socket.on('reconnect', (attempt) => {
-      console.log(`Reconnected after ${attempt} attempts`)
       this.reconnectAttempts = 0
       this.isReconnecting = false
       this.notifyListeners('reconnected', attempt)
@@ -91,7 +87,6 @@ class SocketManager {
 
     setTimeout(() => {
       if (this.socket && !this.socket.connected) {
-        console.log(`Manual reconnection attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts}`)
         this.socket.connect()
       }
     }, delay)

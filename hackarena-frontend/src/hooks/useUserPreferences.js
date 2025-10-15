@@ -161,7 +161,6 @@ export const useSoundPreferences = () => {
     if (!preferences.soundEnabled) return
 
     // Placeholder for sound implementation
-    console.log(`Playing sound: ${soundType}`)
   }, [preferences.soundEnabled])
 
   return {

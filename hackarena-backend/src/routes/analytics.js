@@ -101,11 +101,6 @@ router.get('/games/:gameId/overview', authenticateToken, async (req, res) => {
 
     res.json(responseData);
   } catch (error) {
-    console.error('📊 ANALYTICS OVERVIEW - ERROR occurred:', error);
-    console.error('📊 ANALYTICS OVERVIEW - Error message:', error.message);
-    console.error('📊 ANALYTICS OVERVIEW - Error stack:', error.stack);
-    console.error('📊 ANALYTICS OVERVIEW - Error code:', error.code);
-    console.error('📊 ANALYTICS OVERVIEW - Error details:', error);
     res.status(500).json({ error: 'Failed to fetch analytics' });
   }
 });
@@ -492,7 +487,7 @@ router.get('/games/:gameId/export/pdf', authenticateToken, async (req, res) => {
     });
 
     // PDF Content
-    doc.fontSize(20).text('HackArena Game Results', { align: 'center' });
+    doc.fontSize(20).text('Code Byte Game Results', { align: 'center' });
     doc.moveDown();
     doc.fontSize(16).text(`Game: ${game.title}`);
     doc.text(`Game Code: ${game.game_code}`);

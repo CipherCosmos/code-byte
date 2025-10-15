@@ -43,7 +43,6 @@ export function setupSocketHandlers(io) {
             io.to(`organizer-${participant.game_id}`).emit('participantCountUpdate', {
               count: participantCount.count
             });
-          } else {
           }
         } else if (role === 'viewer') {
           const game = await db.getAsync(
@@ -56,7 +55,6 @@ export function setupSocketHandlers(io) {
           }
         }
       } catch (error) {
-        console.error('❌ Join room error:', error);
         socket.emit('error', { message: 'Failed to join game room' });
       }
     });
@@ -73,7 +71,6 @@ export function setupSocketHandlers(io) {
 
         // Validate input data
         if (!type || typeof type !== 'string') {
-          console.error('Invalid cheat detection data:', data);
           return;
         }
 
@@ -84,7 +81,6 @@ export function setupSocketHandlers(io) {
         );
 
         if (!participant) {
-          console.error('Participant not found for cheat detection:', socket.participantId);
           return;
         }
 
@@ -135,7 +131,6 @@ export function setupSocketHandlers(io) {
         });
 
       } catch (error) {
-        console.error('Cheat detection error:', error);
         socket.emit('error', { message: 'Failed to process cheat detection' });
       }
     });
@@ -171,7 +166,6 @@ export function setupSocketHandlers(io) {
         io.to(`organizer-${gameId}`).emit('participantsUpdate', participants);
         
       } catch (error) {
-        console.error('Eliminate participant error:', error);
       }
     });
 
@@ -199,7 +193,6 @@ export function setupSocketHandlers(io) {
         }
 
       } catch (error) {
-        console.error('Warn participant error:', error);
       }
     });
 
@@ -235,7 +228,6 @@ export function setupSocketHandlers(io) {
         io.to(`organizer-${gameId}`).emit('participantsUpdate', participants);
 
       } catch (error) {
-        console.error('Re-admit participant error:', error);
       }
     });
 
@@ -246,7 +238,6 @@ export function setupSocketHandlers(io) {
 
         // Validate input data
         if (!gameId || !questionId) {
-          console.error('⏰ Invalid data for questionTimeExpired:', data);
           return;
         }
 
@@ -263,7 +254,6 @@ export function setupSocketHandlers(io) {
         // Get question details to determine time limit
         const question = await db.getAsync('SELECT * FROM questions WHERE id = $1', [questionId]);
         if (!question) {
-          console.error('⏰ Question not found for time expiry:', questionId);
           return;
         }
 
@@ -325,7 +315,6 @@ export function setupSocketHandlers(io) {
         });
 
       } catch (error) {
-        console.error('⏰ Question time expired error:', error);
       }
     });
 
@@ -336,7 +325,6 @@ export function setupSocketHandlers(io) {
 
         // Validate input
         if (!gameId) {
-          console.error('Invalid gameId for live analytics request');
           return;
         }
 
@@ -370,7 +358,6 @@ export function setupSocketHandlers(io) {
         }
 
       } catch (error) {
-        console.error('Live analytics error:', error);
       }
     });
 

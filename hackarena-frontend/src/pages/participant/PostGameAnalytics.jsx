@@ -8,7 +8,6 @@ import Footer from '../../components/Footer'
 import toast from 'react-hot-toast'
 
 const PostGameAnalytics = () => {
-  console.log('PostGameAnalytics component rendered')
   const [analytics, setAnalytics] = useState(null)
   const [loading, setLoading] = useState(true)
 
@@ -56,8 +55,8 @@ const PostGameAnalytics = () => {
               <ArrowLeft className="h-5 w-5" />
             </Link>
             <div>
-              <h1 className="text-xl font-bold text-gray-900">Your DSBA Performance Analytics</h1>
-              <p className="text-sm text-gray-600">DSBA Game completed • Final Rank #{participant.finalRank}</p>
+              <h1 className="text-xl font-bold text-gray-900">Your Code Byte Performance Analytics</h1>
+              <p className="text-sm text-gray-600">Code Byte Game completed • Final Rank #{participant.finalRank}</p>
             </div>
           </div>
           <div className="flex items-center space-x-2">

@@ -162,7 +162,6 @@ const QuestionForm = ({ question = null, onSave, onCancel }) => {
           try {
             return JSON.parse(value);
           } catch (e) {
-            console.warn('Failed to parse JSON value:', value, e);
             return fallback;
           }
         }
@@ -371,7 +370,6 @@ const QuestionForm = ({ question = null, onSave, onCancel }) => {
       await onSave(formData)
       toast.success(question ? 'Question updated successfully!' : 'Question created successfully!')
     } catch (error) {
-      console.error('Error saving question:', error)
 
       let errorMessage = 'Failed to save question. Please try again.'
 
@@ -469,7 +467,7 @@ const QuestionForm = ({ question = null, onSave, onCancel }) => {
             </div>
             <div>
               <h3 className="text-2xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">
-                {question ? '✏️ Edit DSBA Question' : '✨ Create New DSBA Question'}
+                {question ? '✏️ Edit Code Byte Question' : '✨ Create New Code Byte Question'}
               </h3>
               <p className="text-sm text-gray-600 mt-1">Build engaging challenges for your hackathon participants</p>
             </div>
@@ -1486,7 +1484,6 @@ const QuestionForm = ({ question = null, onSave, onCancel }) => {
                               setFormData(prev => ({ ...prev, imageUrl: data.image_url }));
                               toast.success('Image uploaded successfully!');
                             } catch (error) {
-                              console.error('Upload failed:', error);
 
                               // Retry logic for network errors
                               if ((error.name === 'TypeError' && error.message.includes('fetch')) ||
@@ -1494,7 +1491,6 @@ const QuestionForm = ({ question = null, onSave, onCancel }) => {
                                   error.message.includes('Failed to fetch')) {
 
                                 if (retryCount < 3) {
-                                  console.log(`Retrying image upload (${retryCount + 1}/3) in 2 seconds...`);
                                   toast.info(`Upload failed, retrying... (${retryCount + 1}/3)`);
                                   setTimeout(() => uploadImage(retryCount + 1), 2000);
                                   return;
@@ -1536,7 +1532,6 @@ const QuestionForm = ({ question = null, onSave, onCancel }) => {
                             alt="Question"
                             className="max-w-full h-48 object-contain border rounded"
                             onError={(e) => {
-                              console.error('Failed to load uploaded image');
                               e.target.style.display = 'none';
                               toast.error('Failed to load uploaded image');
                             }}
@@ -1627,7 +1622,6 @@ const QuestionForm = ({ question = null, onSave, onCancel }) => {
                               setValidationErrors(prev => ({ ...prev, crosswordClues: undefined }));
                             }
                           } catch (error) {
-                            // Show user-friendly error message
                             toast.error('Invalid JSON format for crossword clues. Please check your syntax.');
                           }
                         }}
@@ -1648,7 +1642,6 @@ const QuestionForm = ({ question = null, onSave, onCancel }) => {
                               setValidationErrors(prev => ({ ...prev, crosswordGrid: undefined }));
                             }
                           } catch (error) {
-                            // Show user-friendly error message
                             toast.error('Invalid JSON format for crossword grid. Please check your syntax.');
                           }
                         }}

@@ -101,7 +101,6 @@ const GameInterface = () => {
         }
 
         setPrismLoaded(true);
-        console.log("Prism.js components loaded successfully");
       } catch (error) {
         console.error("Failed to load Prism.js components:", error);
         setPrismLoaded(false);
@@ -114,7 +113,6 @@ const GameInterface = () => {
   // Network connectivity monitoring
   useEffect(() => {
     const handleOnline = () => {
-      console.log("Network connection restored");
       setNetworkError(null);
       toast.success("Internet connection restored");
       // Attempt to reconnect if we were disconnected
@@ -124,7 +122,6 @@ const GameInterface = () => {
     };
 
     const handleOffline = () => {
-      console.log("Network connection lost");
       setNetworkError("No internet connection");
       toast.error("Internet connection lost");
     };
@@ -140,22 +137,11 @@ const GameInterface = () => {
 
   useEffect(() => {
     let timer;
-    console.log("⏱️ Timer useEffect triggered:", {
-      timeLeft,
-      submitted,
-      gameState,
-      isPaused,
-      currentQuestionId: currentQuestion?.id,
-      timestamp: new Date().toISOString()
-    });
 
     if (timeLeft > 0 && !submitted && gameState === "active" && !isPaused) {
-      console.log("⏱️ Starting synchronized timer with", timeLeft, "seconds remaining");
       timer = setInterval(() => {
         setTimeLeft((prev) => {
-          console.log("⏱️ Timer tick - previous timeLeft:", prev);
           if (prev <= 1) {
-            console.log("⏱️ Timer reached zero, triggering server-side auto-submit");
             // Trigger server-side auto-submit instead of client-side
             if (socket && currentQuestion) {
               socket.emit('questionTimeExpired', {
@@ -176,7 +162,6 @@ const GameInterface = () => {
       !isPaused
     ) {
       // Additional check in case timer wasn't running but time is 0
-      console.log("⏱️ Time is 0 and not submitted, triggering server-side auto-submit as fallback");
       if (socket && currentQuestion) {
         socket.emit('questionTimeExpired', {
           gameId: participant?.gameId,
@@ -185,16 +170,9 @@ const GameInterface = () => {
       }
       autoSubmit();
     } else {
-      console.log("⏱️ Timer not started - conditions not met:", {
-        timeLeft,
-        submitted,
-        gameState,
-        isPaused
-      });
     }
     return () => {
       if (timer) {
-        console.log("⏱️ Clearing timer");
         clearInterval(timer);
       }
     };
@@ -202,7 +180,6 @@ const GameInterface = () => {
 
   const initializeGame = useCallback(async () => {
     try {
-      console.log("🔄 Initializing game for participant...");
       setConnectionError(null);
       setNetworkError(null);
 
@@ -210,33 +187,22 @@ const GameInterface = () => {
       const sessionToken = localStorage.getItem("hackarena_session");
       const participantData = localStorage.getItem("hackarena_participant");
 
-      console.log("📋 Session data check:", {
-        hasSessionToken: !!sessionToken,
-        hasParticipantData: !!participantData,
-        gameCode,
-      });
 
       if (!sessionToken || !participantData) {
-        console.log("❌ Session data missing, redirecting to join page");
         toast.error("Session expired. Please join again.");
         navigate(`/join/${gameCode}`);
         return;
       }
 
       const parsedParticipant = JSON.parse(participantData);
-      console.log("👤 Parsed participant data:", parsedParticipant);
       setParticipant(parsedParticipant);
 
       // Try to rejoin if already in game
-      console.log("🔄 Attempting to rejoin game...");
       await rejoinGame(sessionToken);
 
       // Setup socket connection with enhanced error handling
-      console.log("🔌 Connecting to socket...");
       const socketConnection = socketManager.connect();
       setSocket(socketConnection);
-
-      console.log("🔌 Socket connection established:", socketConnection?.id);
 
       // Add connection status listener
       socketManager.addConnectionListener((event, data) => {
@@ -267,21 +233,61 @@ const GameInterface = () => {
       });
 
       // Setup enhanced cheat detection
-      const cheatManager = new CheatDetectionManager((cheatData) => {
-        console.log("🚨 Cheat detected:", cheatData);
-        socketConnection?.emit("cheatDetected", cheatData);
+      const cheatManager = new CheatDetectionManager(async (cheatData) => {
+        try {
+          // Send cheat data to server for processing
+          const sessionToken = localStorage.getItem("hackarena_session");
+          const response = await api.post("/participants/cheat-report", cheatData, {
+            headers: { "x-session-token": sessionToken },
+          });
 
-        // Update local cheat warnings count based on severity
-        if (cheatData.type && ['dev_tools_opened', 'persistent_dev_tools', 'high_suspicious_activity', 'rapid_keyboard_activity', 'rapid_clicking', 'unusual_mouse_movement', 'frequent_window_switching', 'console_manipulation'].includes(cheatData.type)) {
+          // Update local state based on server response
+          if (response.data.warningCount !== undefined) {
+            setCheatWarnings(response.data.warningCount);
+          }
+
+          // Show appropriate warning to user
+          if (response.data.action) {
+            const action = response.data.action;
+            if (action.type === 'eliminate') {
+              toast.error(`🚨 ${action.message}`, {
+                duration: 10000,
+                icon: '🚨'
+              });
+              setGameState("eliminated");
+            } else if (action.type === 'severe_warning') {
+              toast.error(`⚠️ ${action.message}`, {
+                duration: 8000,
+                icon: '⚠️'
+              });
+            } else if (action.type === 'warning') {
+              toast.warning(`⚠️ ${action.message}`, {
+                duration: 6000,
+                icon: '⚠️'
+              });
+            } else if (action.type === 'notice') {
+              toast.info(`ℹ️ ${action.message}`, {
+                duration: 4000,
+                icon: 'ℹ️'
+              });
+            }
+          }
+
+          // Also emit to socket for real-time updates
+          socketConnection?.emit("cheatDetected", cheatData);
+        } catch (error) {
+          console.error('Failed to report cheat:', error);
+          // Fallback to local warning
           setCheatWarnings(prev => prev + 1);
+          toast.warning("Suspicious activity detected", {
+            duration: 4000,
+            icon: '⚠️'
+          });
         }
       });
       setCheatDetection(cheatManager);
 
-      console.log("🎧 Setting up socket listeners...");
       setupSocketListeners(socketConnection, parsedParticipant);
-
-      console.log("✅ Game initialization completed");
     } catch (error) {
       console.error("❌ Failed to initialize game:", error);
       setConnectionError("Failed to connect to game");
@@ -301,7 +307,6 @@ const GameInterface = () => {
     setRetryCount((prev) => prev + 1);
 
     try {
-      console.log("🔄 Manual reconnection attempt...");
 
       // Disconnect existing socket
       if (socket) {
@@ -329,7 +334,6 @@ const GameInterface = () => {
   const rejoinGame = useCallback(
     async (sessionToken) => {
       try {
-        console.log("🔄 Rejoining game with session token...");
         const response = await api.post(
           "/participants/rejoin",
           {},
@@ -337,34 +341,21 @@ const GameInterface = () => {
             headers: { "x-session-token": sessionToken },
           }
         );
-
-        console.log("📥 Rejoin response:", response.data);
         const {
           participant: updatedParticipant,
           currentQuestion: activeQuestion,
         } = response.data;
         setParticipant(updatedParticipant);
 
-        console.log(
-          "🎮 Game status from rejoin:",
-          updatedParticipant.gameStatus
-        );
-
         if (activeQuestion) {
-          console.log(
-            "❓ Active question found during rejoin:",
-            activeQuestion
-          );
           setCurrentQuestion(activeQuestion);
           setGameState("active");
 
           // Check if answers are revealed
           const answersRevealed = activeQuestion.answers_revealed;
-          console.log("🔍 Answers revealed status:", answersRevealed);
 
           if (answersRevealed) {
             // If answers are revealed, show the answer immediately
-            console.log("✅ Answers revealed, showing correct answer");
             setShowAnswer(true);
             setSubmitted(true); // Mark as submitted since answer is revealed
           } else {
@@ -375,33 +366,14 @@ const GameInterface = () => {
                 (new Date(activeQuestion.question_ends_at) - new Date()) / 1000
               )
             );
-            console.log(
-              "⏱️ Rejoin - Question ends at:",
-              activeQuestion.question_ends_at
-            );
-            console.log("⏱️ Rejoin - Current time:", new Date().toISOString());
-            console.log(
-              "⏱️ Rejoin - Calculated time left:",
-              calculatedTimeLeft
-            );
             setTimeLeft(calculatedTimeLeft);
           }
         } else if (updatedParticipant.gameStatus === "completed") {
-          console.log("🏁 Game already completed during rejoin");
           setGameState("ended");
           fetchAnalytics();
         } else if (updatedParticipant.gameStatus === "active") {
-          console.log(
-            "⚠️ Game is active but no current question received - this might be the issue!"
-          );
           // Game is active but no question sent - participant should receive current question
-          console.log(
-            "🔄 Game active but no question - staying in waiting state, expecting gameStarted event"
-          );
         } else {
-          console.log(
-            "⏳ No active question during rejoin, staying in waiting state"
-          );
         }
       } catch (error) {
         console.error("❌ Rejoin failed:", error);
@@ -425,17 +397,7 @@ const GameInterface = () => {
   );
 
   const setupSocketListeners = (socketConnection, participantData) => {
-    console.log(
-      "🎧 Setting up socket listeners for participant:",
-      participantData.id
-    );
-
     // Join participant room
-    console.log("🏠 Joining game room with data:", {
-      gameCode,
-      participantId: participantData.id,
-      role: "participant",
-    });
     socketConnection.emit("joinGameRoom", {
       gameCode,
       participantId: participantData.id,
@@ -444,10 +406,6 @@ const GameInterface = () => {
 
     // Game started
     socketConnection.on("gameStarted", (data) => {
-      console.log("🎮 Game started event received:", data);
-      console.log("📊 Current game state before update:", gameState);
-      console.log("⏱️ Question time_limit from server:", data.question.time_limit);
-      console.log("⏱️ Question question_ends_at from server:", data.question.question_ends_at);
 
       setCurrentQuestion(data.question);
       setGameState("active");
@@ -461,13 +419,8 @@ const GameInterface = () => {
       setHintUsed(false);
       setShowAnswer(false);
 
-      console.log("✅ Game state updated to active");
-      console.log("⏱️ Timer started with:", data.question.time_limit, "seconds");
-      console.log("❓ Question data:", data.question);
-
       // Start cheat detection
       if (cheatDetection) {
-        console.log("🛡️ Starting cheat detection");
         cheatDetection.startMonitoring();
       }
 
@@ -476,9 +429,6 @@ const GameInterface = () => {
 
     // Next question
     socketConnection.on("nextQuestion", (data) => {
-      console.log("🔄 Next question event received:", data);
-      console.log("⏱️ Next question time_limit from server:", data.question.time_limit);
-      console.log("⏱️ Next question question_ends_at from server:", data.question.question_ends_at);
 
       setCurrentQuestion(data.question);
       // Timer starts counting down from the assigned time when organizer begins next question
@@ -492,8 +442,6 @@ const GameInterface = () => {
       setShowAnswer(false);
       setAnswerResult(null);
 
-      console.log("Next question - Timer started with:", data.question.time_limit, "seconds");
-      console.log("Next question - Question data:", data.question);
 
       toast("Next question!");
     });
@@ -585,25 +533,13 @@ const GameInterface = () => {
 
     // Time expired with enhanced synchronization
     socketConnection.on("questionTimeExpired", (data) => {
-      console.log("⏰ Received questionTimeExpired event from server:", data);
-      console.log("⏰ Current state when time expired:", {
-        timeLeft,
-        submitted,
-        gameState,
-        isPaused,
-        currentQuestionId: currentQuestion?.id,
-        serverTimestamp: data?.timestamp
-      });
 
       // Force timer to zero for visual synchronization
       setTimeLeft(0);
 
       // Only auto-submit if not already submitted
       if (!submitted) {
-        console.log("⏰ Server-triggered auto-submit initiated");
         autoSubmit();
-      } else {
-        console.log("⏰ Auto-submit skipped - already submitted");
       }
     });
   };
@@ -673,13 +609,11 @@ const GameInterface = () => {
           autoSubmit: isAutoSubmit,
         };
 
-        console.log("Submitting answer with payload:", payload);
 
         const response = await api.post("/participants/answer", payload, {
           headers: { "x-session-token": sessionToken },
         });
 
-        console.log("Submit answer response:", response.data);
 
         setSubmitted(true);
         setAnswerResult(response.data);
@@ -699,13 +633,6 @@ const GameInterface = () => {
 
         // Handle time expired error specifically
         if (error.response?.data?.error === "Question time has expired") {
-          console.log("⏰ Time expired error received from server, forcing auto-submit");
-          console.log("⏰ Time expired error details:", {
-            error: error.response?.data,
-            timeLeft,
-            submitted,
-            currentQuestionId: currentQuestion?.id
-          });
           setSubmitted(true);
           setAnswerResult({
             isCorrect: false,
@@ -755,18 +682,7 @@ const GameInterface = () => {
 
   const autoSubmit = useCallback(() => {
     if (!submitted && currentQuestion) {
-      console.log("⏰ Auto-submitting answer due to time expiry");
-      console.log("⏰ Auto-submit state:", {
-        submitted,
-        currentQuestionId: currentQuestion?.id,
-        answer,
-        timeLeft,
-        gameState,
-        isPaused,
-        timestamp: new Date().toISOString()
-      });
       // Force submit with current answer (can be empty)
-      console.log("⏰ Auto-submit - Answer to submit:", answer);
 
       // Emit questionTimeExpired to server to handle synchronized auto-submission
       if (socket) {
@@ -777,12 +693,6 @@ const GameInterface = () => {
       }
 
       submitAnswer(true);
-    } else {
-      console.log("⏰ Auto-submit skipped - conditions not met:", {
-        submitted,
-        hasCurrentQuestion: !!currentQuestion,
-        currentQuestionId: currentQuestion?.id
-      });
     }
   }, [submitted, currentQuestion, answer, timeLeft, gameState, isPaused, socket, participant, submitAnswer]);
 
@@ -912,7 +822,6 @@ int main() {
       }
       return Prism.highlight(code, language);
     } catch (error) {
-      console.error("Prism.js highlighting error:", error);
       return code; // Fallback to plain text
     }
   };
@@ -955,10 +864,10 @@ int main() {
             <XCircle className="h-16 w-16 text-red-400 mx-auto" />
           </div>
           <h1 className="text-3xl font-bold text-white mb-4">
-            Eliminated from DSBA Game
+            Eliminated from Code Byte Game
           </h1>
           <p className="text-blue-100 mb-8">
-            You have been eliminated from the DSBA hackathon by the organizer.
+            You have been eliminated from the Code Byte hackathon by the organizer.
           </p>
           <div className="card p-6 bg-white/10 backdrop-blur-sm border-white/20">
             <p className="text-white text-sm">
@@ -985,10 +894,10 @@ int main() {
               <Trophy className="h-16 w-16 dsba-accent mx-auto" />
             </div>
             <h1 className="text-3xl font-bold text-white mb-4">
-              Welcome to DSBA HackArena, {participant?.name}!
+              Welcome to Code Byte, {participant?.name}!
             </h1>
             <p className="text-blue-100 mb-8">
-              Waiting for the DSBA game to start...
+              Waiting for the Code Byte game to start...
             </p>
             <div className="card p-6 bg-white/10 backdrop-blur-sm border-white/20">
               <div className="grid grid-cols-3 gap-4 text-center text-white">
@@ -1022,10 +931,10 @@ int main() {
             <div className="text-center mb-8">
               <Trophy className="h-16 w-16 dsba-accent mx-auto mb-4" />
               <h1 className="text-3xl font-bold text-white mb-2">
-                DSBA Game Completed!
+                Code Byte Game Completed!
               </h1>
               <p className="text-blue-100">
-                Here's how you performed in the DSBA competition
+                Here's how you performed in the Code Byte competition
               </p>
             </div>
 
@@ -1326,7 +1235,6 @@ int main() {
                       alt="Question"
                       className="max-w-full h-48 sm:h-64 object-contain border rounded-lg shadow-sm"
                       onError={(e) => {
-                        console.error('Failed to load question image');
                         e.target.style.display = 'none';
                         // Could show a fallback message
                       }}
@@ -1393,19 +1301,13 @@ int main() {
               ) : (
                 <div className="text-center sm:text-left">
                   <div className="flex items-center justify-center sm:justify-start space-x-4 text-sm">
-                    <span className={`flex items-center ${
-                      currentQuestion?.time_decay_enabled ? 'text-orange-600' : 'text-blue-600'
-                    }`}>
-                      {currentQuestion?.time_decay_enabled ? (
-                        <>
-                          <Zap className="h-4 w-4 mr-1" />
-                          Time decay scoring active - answer faster for higher scores!
-                        </>
-                      ) : (
-                        <>
-                          <Clock className="h-4 w-4 mr-1" />
-                          Answer quickly for bonus points
-                        </>
+                    <span className="flex items-center text-blue-600">
+                      <Clock className="h-4 w-4 mr-1" />
+                      Time-based scoring: Faster answers get higher scores!
+                      {currentQuestion?.difficulty && (
+                        <span className="text-purple-600 ml-2">
+                          • {currentQuestion.difficulty.toUpperCase()} difficulty
+                        </span>
                       )}
                     </span>
                         {currentQuestion?.question_type === 'code' && (
@@ -1486,11 +1388,25 @@ int main() {
                         </div>
                       )}
 
-                      {answerResult.timeDecayBonus > 0 && (
+                      {answerResult.timeBonus > 0 && (
                         <div className="flex items-center space-x-2 bg-blue-100 px-3 py-2 rounded-lg">
                           <Clock className="h-4 w-4 text-blue-600" />
                           <span className="text-blue-800 font-medium">
-                            Time decay bonus: {(answerResult.timeDecayBonus * 100).toFixed(1)}%
+                            Time bonus: +{Math.round(answerResult.timeBonus)} points
+                            {answerResult.speedMultiplier > 0 && (
+                              <span className="text-xs ml-1">
+                                ({(answerResult.speedMultiplier * 100).toFixed(0)}% speed)
+                              </span>
+                            )}
+                          </span>
+                        </div>
+                      )}
+
+                      {answerResult.difficultyMultiplier > 1 && (
+                        <div className="flex items-center space-x-2 bg-purple-100 px-3 py-2 rounded-lg">
+                          <Target className="h-4 w-4 text-purple-600" />
+                          <span className="text-purple-800 font-medium">
+                            Difficulty bonus: x{answerResult.difficultyMultiplier}
                           </span>
                         </div>
                       )}

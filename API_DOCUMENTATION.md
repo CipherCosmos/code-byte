@@ -1,6 +1,6 @@
-# HackArena API Documentation
+# Code Byte API Documentation
 
-Comprehensive API reference for the HackArena backend server.
+Comprehensive API reference for the Code Byte backend server.
 
 ## Base URL
 ```
@@ -559,7 +559,7 @@ Check server health status.
 ```json
 {
   "status": "OK",
-  "message": "HackArena Backend is running"
+  "message": "Code Byte Backend is running"
 }
 ```
 
@@ -709,9 +709,9 @@ API versioning is handled through URL paths:
 
 ### JavaScript/TypeScript Client
 ```javascript
-import HackArena from 'hackarena-client';
+import CodeByte from 'codebyte-client';
 
-const client = new HackArena({
+const client = new CodeByte({
   baseURL: 'http://localhost:3001/api',
   token: 'your-jwt-token'
 });

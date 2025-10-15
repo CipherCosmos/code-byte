@@ -75,11 +75,11 @@ const Home = () => {
         <div className="absolute inset-0 bg-black/20"></div>
         <div className="relative max-w-5xl mx-auto text-center">
           <div className="inline-flex items-center space-x-3 bg-white/10 backdrop-blur-sm rounded-full px-6 py-2 mb-8">
-            <img src="/dsba-logo.svg" alt="DSBA Logo" className="h-6 w-auto" />
-            <span className="text-sm font-medium">Dayananda Sagar Business Academy</span>
+            <img src="https://res.cloudinary.com/ddhdndela/image/upload/v1760560511/generated_image_guxl9c.png" alt="DSBA Logo" className="h-6 w-auto" />
+            <span className="text-sm font-medium">Code Byte</span>
           </div>
           <h1 className="text-6xl font-bold mb-6 leading-tight">
-            DSBA Inter-College
+            Code Byte Inter-College
             <span className="block dsba-accent text-7xl font-extrabold">Hackathon Platform</span>
           </h1>
           <p className="text-xl text-blue-100 mb-10 max-w-3xl mx-auto leading-relaxed">
@@ -150,7 +150,7 @@ const Home = () => {
         <div className="max-w-4xl mx-auto">
           <div className="text-center mb-16">
             <h2 className="text-3xl font-bold text-gray-900 mb-4">
-              How HackArena Works
+              How Code Byte Works
             </h2>
             <p className="text-lg text-gray-600">
               Simple setup, powerful features, seamless execution
@@ -208,10 +208,10 @@ const Home = () => {
         <div className="absolute inset-0 bg-black/30"></div>
         <div className="relative max-w-4xl mx-auto text-center">
           <h2 className="text-4xl font-bold mb-6">
-            Ready to Host Your Next DSBA Hackathon?
+            Ready to Host Your Next Code Byte Hackathon?
           </h2>
           <p className="text-xl text-blue-100 mb-10 leading-relaxed">
-            Join hundreds of organizers already using DSBA HackArena for their technical events.
+            Join hundreds of organizers already using Code Byte for their technical events.
           </p>
           <Link
             to="/register"

@@ -4,7 +4,6 @@ import { LogOut, Menu, X } from 'lucide-react'
 import { useState } from 'react'
 
 const Header = () => {
-  console.log('Header component rendered')
   const { user, logout } = useAuth()
   const navigate = useNavigate()
   const [isMenuOpen, setIsMenuOpen] = useState(false)
@@ -25,10 +24,10 @@ const Header = () => {
           {/* Logo */}
           <Link to="/" className="flex items-center space-x-4 group">
             <div className="p-2 bg-dsba-navy rounded-lg group-hover:bg-blue-800 transition-colors">
-              <img src="/dsba-logo.svg" alt="DSBA Logo" className="h-8 w-auto" />
+              <img src="https://res.cloudinary.com/ddhdndela/image/upload/v1760560511/generated_image_guxl9c.png" alt="DSBA Logo" className="h-8 w-auto" />
             </div>
             <div className="flex flex-col">
-              <span className="dsba-logo text-xl font-bold">DSBA HackArena</span>
+              <span className="dsba-logo text-xl font-bold">Code Byte</span>
               <span className="text-xs text-dsba-navy font-medium">College Hackathon Platform</span>
             </div>
           </Link>

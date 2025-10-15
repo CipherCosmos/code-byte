@@ -56,15 +56,8 @@ export const AppDataSource = new DataSource({
 // Initialize the data source with error handling
 AppDataSource.initialize()
   .then(() => {
-    console.log('✅ Database connected successfully');
   })
   .catch((error) => {
     console.error('❌ Database connection failed:', error.message);
-    console.error('❌ Connection details:', {
-      host: process.env.DATABASE_HOST || 'pg-2e6b7563-svm-aac5.f.aivencloud.com',
-      port: process.env.DATABASE_PORT || '14244',
-      database: process.env.DATABASE_NAME || 'defaultdb',
-      ssl: process.env.DATABASE_SSL === 'true',
-    });
     process.exit(1); // Exit the process if the database connection fails
   });

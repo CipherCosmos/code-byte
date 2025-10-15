@@ -100,15 +100,15 @@ const Register = () => {
           <div className="text-center">
             <div className="flex items-center justify-center space-x-4 mb-6">
               <div className="p-4 bg-dsba-navy rounded-2xl shadow-lg">
-                <img src="/dsba-logo.svg" alt="DSBA Logo" className="h-10 w-auto" />
+                <img src="https://res.cloudinary.com/ddhdndela/image/upload/v1760560511/generated_image_guxl9c.png" alt="DSBA Logo" className="h-10 w-auto" />
               </div>
               <div>
-                <h1 className="dsba-logo text-2xl">DSBA HackArena</h1>
+                <h1 className="dsba-logo text-2xl">Code Byte</h1>
                 <p className="text-sm text-dsba-navy font-medium">Organizer Portal</p>
               </div>
             </div>
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">Join DSBA HackArena</h2>
-            <p className="text-gray-600">Create your DSBA organizer account</p>
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">Join Code Byte</h2>
+            <p className="text-gray-600">Create your Code Byte organizer account</p>
           </div>
 
         <div className="card p-10 shadow-2xl border-0 bg-white/80 backdrop-blur-sm">

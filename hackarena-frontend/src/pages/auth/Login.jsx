@@ -50,7 +50,7 @@ const Login = () => {
         <div className="max-w-md w-full space-y-8">
           <div className="text-center">
             <h2 className="text-2xl font-bold text-gray-900 mb-2">Welcome Back</h2>
-            <p className="text-gray-600">Sign in to your DSBA organizer account</p>
+            <p className="text-gray-600">Sign in to your Code Byte organizer account</p>
           </div>
 
         <div className="card p-10 shadow-2xl border-0 bg-white/80 backdrop-blur-sm">

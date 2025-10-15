@@ -12,29 +12,29 @@ const Footer = () => {
           <div className="md:col-span-2">
             <div className="flex items-center space-x-4 mb-6">
               <div className="p-3 bg-dsba-navy rounded-xl">
-                <img src="/dsba-logo.svg" alt="DSBA Logo" className="h-8 w-auto" />
+                <img src="https://res.cloudinary.com/ddhdndela/image/upload/v1760560511/generated_image_guxl9c.png" alt="DSBA Logo" className="h-8 w-auto" />
               </div>
               <div className="flex flex-col">
-                <span className="dsba-logo text-white text-xl font-bold">DSBA HackArena</span>
+                <span className="dsba-logo text-white text-xl font-bold">Code Byte</span>
                 <span className="text-sm text-dsba-gold font-medium">College Hackathon Platform</span>
               </div>
             </div>
             <p className="text-gray-300 mb-6 max-w-lg leading-relaxed">
-              Empowering DSBA college hackathons with real-time competition technology.
+              Empowering college hackathons with real-time competition technology.
               Built for live technical events with enterprise-grade reliability and performance.
             </p>
             <div className="flex space-x-6">
               <a
                 href="mailto:itclub@dsba.edu.in"
                 className="text-gray-400 hover:text-dsba-gold transition-colors p-2 hover:bg-white/10 rounded-lg"
-                aria-label="Email DSBA IT Club"
+                aria-label="Email Code Byte IT Club"
               >
                 <Mail className="h-6 w-6" />
               </a>
               <a
                 href="tel:+919876543210"
                 className="text-gray-400 hover:text-dsba-gold transition-colors p-2 hover:bg-white/10 rounded-lg"
-                aria-label="Call DSBA"
+                aria-label="Call Code Byte"
               >
                 <Phone className="h-6 w-6" />
               </a>
@@ -43,7 +43,7 @@ const Footer = () => {
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-gray-400 hover:text-dsba-gold transition-colors p-2 hover:bg-white/10 rounded-lg"
-                aria-label="Find DSBA on map"
+                aria-label="Find Code Byte on map"
               >
                 <MapPin className="h-6 w-6" />
               </a>
@@ -103,7 +103,7 @@ const Footer = () => {
                    className="hover:text-dsba-gold transition-colors flex items-center group"
                  >
                    <span className="w-2 h-2 bg-dsba-gold rounded-full mr-3 opacity-0 group-hover:opacity-100 transition-opacity"></span>
-                   DSBA Website
+                   Code Byte Website
                    <ExternalLink className="h-4 w-4 ml-2 opacity-60" />
                  </a>
                </li>
@@ -144,15 +144,15 @@ const Footer = () => {
                </div>
                <div className="flex flex-col">
                  <span className="text-sm font-medium text-white">
-                   Developed by DSBA IT Club
+                   Developed by Code Byte IT Club
                  </span>
                  <span className="text-xs text-gray-400">
-                   Dayananda Sagar Business Academy
+                   Code Byte
                  </span>
                </div>
              </div>
              <div className="text-sm text-gray-400 font-medium">
-               © {currentYear} DSBA HackArena. All rights reserved.
+               © {currentYear} Code Byte. All rights reserved.
              </div>
            </div>
          </div>

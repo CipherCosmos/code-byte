@@ -19,7 +19,6 @@ export const authenticateToken = async (req, res, next) => {
 
     // Check if database connection is available
     if (!db) {
-      console.error('❌ Database connection not available');
       return res.status(500).json({ error: 'Database connection error' });
     }
 

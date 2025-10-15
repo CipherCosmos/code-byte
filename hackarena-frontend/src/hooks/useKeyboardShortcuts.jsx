@@ -55,13 +55,11 @@ export const useCommonShortcuts = () => {
     // Common actions
     'ctrl+,': () => {
       // Open settings/preferences (placeholder)
-      console.log('Settings shortcut pressed')
     },
 
     // Help shortcuts
     '?': () => {
       // Show help modal (placeholder)
-      console.log('Help shortcut pressed')
     },
 
     // Escape shortcuts

@@ -1,6 +1,6 @@
-# HackArena Backend
+# Code Byte Backend
 
-A comprehensive backend API server for HackArena, an inter-college hackathon game management system built with Node.js, Express, and SQLite.
+A comprehensive backend API server for Code Byte, an inter-college hackathon game management system built with Node.js, Express, and SQLite.
 
 ## 🚀 Features
 
@@ -44,7 +44,7 @@ A comprehensive backend API server for HackArena, an inter-college hackathon gam
 
 ```bash
 git clone <repository-url>
-cd hackarena-backend
+cd codebyte-backend
 npm install
 ```
 
@@ -59,7 +59,7 @@ NODE_ENV=development
 FRONTEND_URL=http://localhost:5173
 
 # Database
-DATABASE_URL=./database/hackarena.db
+DATABASE_URL=./database/codebyte.db
 
 # Authentication
 JWT_SECRET=your-super-secret-jwt-key-here
@@ -259,7 +259,7 @@ Get public leaderboard for a game (no authentication required).
 | `JWT_SECRET` | JWT signing secret | Required |
 | `GOOGLE_CLIENT_ID` | Google OAuth client ID | Required for Google auth |
 | `GOOGLE_CLIENT_SECRET` | Google OAuth client secret | Required for Google auth |
-| `DATABASE_URL` | SQLite database path | `./database/hackarena.db` |
+| `DATABASE_URL` | SQLite database path | `./database/codebyte.db` |
 | `UPLOAD_PATH` | File upload directory | `./uploads` |
 | `MAX_FILE_SIZE` | Maximum upload file size (bytes) | `5242880` |
 

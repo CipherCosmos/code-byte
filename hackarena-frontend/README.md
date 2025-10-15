@@ -1,6 +1,6 @@
-# HackArena Frontend
+# Code Byte Frontend
 
-A modern, responsive React frontend for HackArena, an inter-college hackathon game management system. Built with React, Vite, and Tailwind CSS for optimal performance and user experience.
+A modern, responsive React frontend for Code Byte, an inter-college hackathon game management system. Built with React, Vite, and Tailwind CSS for optimal performance and user experience.
 
 ## 🎯 Features
 
@@ -37,7 +37,7 @@ A modern, responsive React frontend for HackArena, an inter-college hackathon ga
 
 - Node.js (v16 or higher)
 - npm or yarn
-- Running HackArena backend server
+- Running Code Byte backend server
 
 ## 🚀 Quick Start
 
@@ -45,7 +45,7 @@ A modern, responsive React frontend for HackArena, an inter-college hackathon ga
 
 ```bash
 git clone <repository-url>
-cd hackarena-frontend
+cd code-byte-frontend
 npm install
 ```
 
@@ -61,7 +61,7 @@ VITE_API_BASE_URL=http://localhost:3001/api
 VITE_GOOGLE_CLIENT_ID=your-google-client-id
 
 # Application Settings
-VITE_APP_NAME=HackArena
+VITE_APP_NAME=Code Byte
 VITE_APP_VERSION=1.0.0
 ```
 
@@ -83,7 +83,7 @@ The application will be available at `http://localhost:5173`
 ## 📁 Project Structure
 
 ```
-hackarena-frontend/
+code-byte-frontend/
 ├── public/
 │   ├── index.html
 │   └── favicon.ico
@@ -174,7 +174,7 @@ Authentication state management:
 |----------|-------------|---------|
 | `VITE_API_BASE_URL` | Backend API base URL | `http://localhost:3001/api` |
 | `VITE_GOOGLE_CLIENT_ID` | Google OAuth client ID | Required for Google auth |
-| `VITE_APP_NAME` | Application display name | `HackArena` |
+| `VITE_APP_NAME` | Application display name | `Code Byte` |
 | `VITE_APP_VERSION` | Application version | `1.0.0` |
 
 ### Tailwind Configuration

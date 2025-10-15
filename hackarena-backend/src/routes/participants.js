@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { db } from '../database/init.js';
 import { authenticateParticipant } from '../middleware/auth.js';
 import CodeExecutionService from '../services/codeExecution.js';
+import AntiCheatService from '../services/antiCheatService.js';
 
 // Time decay function
 function calculateTimeDecayBonus(timeTaken, timeLimit, decayFactor = 0.1) {
@@ -540,40 +541,61 @@ router.post('/answer', authenticateParticipant, async (req, res) => {
       correctnessScore = isCorrect ? 50 : 0; // Base score: 50 points
     }
 
-    // Calculate time decay bonus (up to 50 points)
-    let timeDecayBonus = 0;
-
+    // Calculate time-based scoring system
+    // let timeBonus = 0;
+    let baseScore = 0;
+    
+    // Base scoring: Correct answers get base points, incorrect get 0
     if (isCorrect && !autoSubmit) {
-      // Check if submission time is within question time limit
+      baseScore = correctnessScore;
+      
+      // Time-based bonus calculation
       if (timeTaken <= question.time_limit) {
-        // Calculate time decay bonus: up to 50 points based on speed
-        const decayFactor = question.time_decay_enabled ? question.time_decay_factor || 0.1 : 0;
-        if (decayFactor > 0) {
-          const normalizedTime = timeTaken / question.time_limit;
-          timeDecayBonus = 50 * Math.exp(-decayFactor * normalizedTime); // Up to 50 points for time decay
-          scoreEarned = correctnessScore + timeDecayBonus;
+        // Calculate time bonus based on speed
+        // Faster answers get higher bonuses
+        const timeRatio = timeTaken / question.time_limit;
+        const speedMultiplier = Math.max(0, 1 - timeRatio); // 1.0 for instant, 0.0 for time limit
+        
+        if (question.time_decay_enabled) {
+          // Exponential decay: faster answers get exponentially higher scores
+          const decayFactor = question.time_decay_factor || 0.1;
+          timeBonus = baseScore * Math.exp(-decayFactor * timeRatio);
         } else {
-          scoreEarned = correctnessScore + 50; // Full time bonus if no decay
-          timeDecayBonus = 50;
+          // Linear time bonus: up to 50% bonus for very fast answers
+          timeBonus = baseScore * 0.5 * speedMultiplier;
         }
+        
+        // Ensure time bonus doesn't exceed base score
+        timeBonus = Math.min(timeBonus, baseScore);
+        scoreEarned = baseScore + timeBonus;
       } else {
         // Time limit exceeded - only base points if correct
-        scoreEarned = correctnessScore;
-        timeDecayBonus = 0;
+        scoreEarned = baseScore;
+        timeBonus = 0;
       }
     } else if (autoSubmit) {
       // Auto-submitted answers get no points and are marked incorrect
       scoreEarned = 0;
       isCorrect = false; // Override correctness for auto-submitted answers
-      timeDecayBonus = 0;
+      timeBonus = 0;
     } else {
       // Incorrect answers get no points
       scoreEarned = 0;
-      timeDecayBonus = 0;
+      timeBonus = 0;
     }
 
-    // Ensure score doesn't exceed 100 points total
-    scoreEarned = Math.min(scoreEarned, 100);
+    // Apply difficulty multiplier to base score
+    const difficultyMultiplier = {
+      'easy': 1.0,
+      'medium': 1.2,
+      'hard': 1.5
+    };
+    
+    const multiplier = difficultyMultiplier[question.difficulty] || 1.0;
+    scoreEarned = Math.round(scoreEarned * multiplier);
+    
+    // Ensure score doesn't exceed reasonable maximum (200 points)
+    scoreEarned = Math.min(scoreEarned, 200);
 
     // Hint penalty: 10 points deduction
     if (hintUsed) {
@@ -654,7 +676,6 @@ router.post('/answer', authenticateParticipant, async (req, res) => {
           'UPDATE game_sessions SET answered_participants = answered_participants + 1 WHERE current_question_id = $1',
           [questionId]
         );
-      } else {
       }
 
       if (inTransaction) {
@@ -680,7 +701,9 @@ router.post('/answer', authenticateParticipant, async (req, res) => {
       submitted: true,
       isCorrect,
       scoreEarned,
-      timeDecayBonus: timeDecayBonus || 0,
+      baseScore,
+      timeBonus: timeBonus || 0,
+      difficultyMultiplier: multiplier,
       partialScore,
       codeQualityScore,
       performanceScore,
@@ -692,9 +715,13 @@ router.post('/answer', authenticateParticipant, async (req, res) => {
       totalTestCases,
       autoSubmitted: autoSubmit || false,
       submittedAt: new Date().toISOString(),
+      timeRatio: timeTaken / question.time_limit,
+      speedMultiplier: timeTaken <= question.time_limit ? Math.max(0, 1 - (timeTaken / question.time_limit)) : 0,
       message: autoSubmit
         ? 'Time expired - answer auto-submitted'
-        : (isCorrect ? 'Correct answer!' : (partialScore > 0 ? 'Partial credit awarded!' : 'Incorrect answer'))
+        : (isCorrect ? 
+            `Correct answer! +${baseScore} base +${Math.round(timeBonus)} time bonus = ${scoreEarned} total` : 
+            (partialScore > 0 ? 'Partial credit awarded!' : 'Incorrect answer'))
     });
   } catch (error) {
     // Provide more specific error messages based on error type
@@ -716,40 +743,100 @@ router.post('/answer', authenticateParticipant, async (req, res) => {
 // Report cheat attempt
 router.post('/cheat-report', authenticateParticipant, async (req, res) => {
   try {
-    const { cheatType } = req.body;
+    const cheatData = req.body;
     const participant = req.participant;
 
-    // Update cheat warnings
-    const newWarningCount = participant.cheat_warnings + 1;
+    // Process cheat event through anti-cheat service
+    const result = await AntiCheatService.processCheatEvent(participant.id, cheatData);
     
-    let penaltyScore = 0;
-    let status = 'active';
-
-    if (newWarningCount === 1) {
-      penaltyScore = 10;
-    } else if (newWarningCount === 2) {
-      penaltyScore = 15;
-    } else if (newWarningCount >= 3) {
-      status = 'flagged'; // Flag for organizer attention
+    // Apply penalty if needed
+    if (result.action.penalty > 0) {
+      await db.runAsync(
+        'UPDATE participants SET total_score = total_score - $1 WHERE id = $2',
+        [result.action.penalty, participant.id]
+      );
     }
 
-    await db.runAsync(
-      `UPDATE participants SET
-       cheat_warnings = $1,
-       total_score = total_score - $2,
-       status = $3
-       WHERE id = $4`,
-      [newWarningCount, penaltyScore, status, participant.id]
-    );
+    // Update participant status if needed
+    if (result.action.type === 'eliminate') {
+      await db.runAsync(
+        'UPDATE participants SET status = $1 WHERE id = $2',
+        ['eliminated', participant.id]
+      );
+    } else if (result.action.type === 'severe_warning') {
+      await db.runAsync(
+        'UPDATE participants SET status = $1 WHERE id = $2',
+        ['flagged', participant.id]
+      );
+    }
 
     res.json({
-      warning: newWarningCount,
-      penalty: penaltyScore,
-      status: status
+      warningCount: result.warningCount,
+      cheatScore: result.newCheatScore,
+      action: result.action,
+      penalty: result.action.penalty,
+      status: result.action.type === 'eliminate' ? 'eliminated' : 
+              result.action.type === 'severe_warning' ? 'flagged' : 'active'
     });
   } catch (error) {
     console.error('Cheat report error:', error);
     res.status(500).json({ error: 'Failed to report cheat' });
+  }
+});
+
+// Get flagged participants (for organizer)
+router.get('/flagged/:gameId', async (req, res) => {
+  try {
+    const { gameId } = req.params;
+    const flaggedParticipants = await AntiCheatService.getFlaggedParticipants(gameId);
+    const cheatStats = await AntiCheatService.getGameCheatStats(gameId);
+    
+    res.json({
+      flaggedParticipants,
+      cheatStats
+    });
+  } catch (error) {
+    console.error('Error getting flagged participants:', error);
+    res.status(500).json({ error: 'Failed to get flagged participants' });
+  }
+});
+
+// Apply manual penalty (for organizer)
+router.post('/penalty/:participantId', async (req, res) => {
+  try {
+    const { participantId } = req.params;
+    const { penaltyType, penaltyPoints, reason, organizerId } = req.body;
+    
+    // Verify organizer has permission (basic check)
+    const participant = await db.getAsync(
+      `SELECT p.*, g.organizer_id FROM participants p
+       JOIN games g ON p.game_id = g.id
+       WHERE p.id = $1`,
+      [participantId]
+    );
+
+    if (!participant) {
+      return res.status(404).json({ error: 'Participant not found' });
+    }
+
+    if (participant.organizer_id !== organizerId) {
+      return res.status(403).json({ error: 'Unauthorized to apply penalty' });
+    }
+
+    const result = await AntiCheatService.applyPenalty(
+      participantId, 
+      penaltyType, 
+      penaltyPoints, 
+      reason
+    );
+
+    res.json({
+      success: true,
+      ...result
+    });
+  } catch (error) {
+    console.error('Error applying penalty:', error);
+    res.status(500).json({ error: 'Failed to apply penalty' });
   }
 });
 
