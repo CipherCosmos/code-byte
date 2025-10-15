@@ -3,7 +3,7 @@ services:
     name: hackarena-backend
     runtime: node
     buildCommand: cd hackarena-backend && npm install && npm run build
-    startCommand: npm run start:render
+    startCommand: npm run migrate:prod && npm start
     envVars:
       - key: NODE_ENV
         value: production

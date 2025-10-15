@@ -2,7 +2,7 @@
   "name": "hackarena-backend",
   "version": "1.0.0",
   "description": "HackArena Backend API Server",
-  "main": "src/server.js",
+  "main": "dist/server.js",
   "type": "module",
   "ts-node": {
     "esm": true,
@@ -11,11 +11,11 @@
   "scripts": {
     "build": "tsc",
     "start": "node dist/server.js",
-    "start:render": "npm run build && npm run migrate:prod && npm start",
+    "start:render": "npm run migrate:prod && npm start",
     "dev": "node --loader ts-node/esm src/server.ts",
     "watch": "tsc -w",
     "migrate": "ts-node --esm src/database/migrate.js",
-    "migrate:prod": "node --loader ts-node/esm src/database/migrate-prod.js",
+    "migrate:prod": "node dist/database/migrate-prod.js",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage"
