@@ -268,6 +268,7 @@ router.post('/rejoin', authenticateParticipant, async (req, res) => {
     // Get current game state
     let currentQuestion = null;
     let answersRevealed = false;
+    let questionStartTime = null;
     if (game.status === 'active') {
       const session = await db.getAsync(
         `SELECT gs.*, q.* FROM game_sessions gs
@@ -278,6 +279,7 @@ router.post('/rejoin', authenticateParticipant, async (req, res) => {
 
       if (session) {
         answersRevealed = session.answers_revealed;
+        questionStartTime = session.question_started_at;
 
         // Always send current question for active games, regardless of reveal status
         // Check if participant already answered this question
@@ -341,6 +343,7 @@ router.post('/rejoin', authenticateParticipant, async (req, res) => {
         gameStatus: game.status
       },
       currentQuestion,
+      questionStartTime,
       gameCode: game.game_code
     };
 
@@ -421,7 +424,7 @@ router.post('/answer', authenticateParticipant, async (req, res) => {
       return res.status(404).json({ error: 'Question not found' });
     }
 
-    // Verify question is still active (no server-side time checking)
+    // Verify question is still active and validate server-side time tracking
     const session = await db.getAsync(
       'SELECT * FROM game_sessions WHERE current_question_id = $1',
       [questionId]
@@ -429,6 +432,30 @@ router.post('/answer', authenticateParticipant, async (req, res) => {
 
     if (!session) {
       return res.status(400).json({ error: 'Question is not currently active' });
+    }
+
+    // Server-side time validation: Calculate elapsed time from question start
+    const questionStartTime = new Date(session.question_started_at);
+    const currentTime = new Date();
+    const serverElapsedTime = Math.floor((currentTime - questionStartTime) / 1000); // in seconds
+
+    // Check if question time has expired on server side
+    if (serverElapsedTime >= question.time_limit) {
+      return res.status(400).json({
+        error: 'Question time has expired',
+        serverElapsedTime,
+        timeLimit: question.time_limit,
+        message: 'Your submission was received after the server-calculated time limit'
+      });
+    }
+
+    // Validate client-reported time against server time (allow some tolerance for network latency)
+    const timeTolerance = 5; // 5 seconds tolerance
+    const maxAllowedTime = serverElapsedTime + timeTolerance;
+
+    if (timeTaken > maxAllowedTime) {
+      console.warn(`Time validation warning: participant ${participant.id}, question ${questionId}, client time: ${timeTaken}s, server time: ${serverElapsedTime}s`);
+      // Allow submission but log the discrepancy - don't reject to avoid false positives
     }
 
     // Calculate score with enhanced features
@@ -624,18 +651,18 @@ router.post('/answer', authenticateParticipant, async (req, res) => {
     const answerId = uuidv4();
     let insertSql, insertParams;
 
-    // Insert answer with all required fields
+    // Insert answer with all required fields including question start time
     insertSql = `INSERT INTO answers (
       id, participant_id, question_id, answer, answer_text, is_correct, score_earned, time_taken, hint_used,
       execution_results, partial_score, code_quality_score, performance_score, correctness_score,
       evaluation_mode, execution_time_ms, memory_used_kb, test_cases_passed, total_test_cases,
-      time_decay_bonus, auto_submitted, auto_submitted_at
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)`;
+      time_decay_bonus, auto_submitted, auto_submitted_at, question_started_at
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)`;
     insertParams = [
       answerId, participant.id, questionId, finalAnswer, finalAnswer, isCorrect, scoreEarned, timeTaken, hintUsed,
       executionResults, partialScore, codeQualityScore, performanceScore, correctnessScore,
       evaluationMode, executionTimeMs, memoryUsedKb, testCasesPassed, totalTestCases,
-      timeDecayBonus, autoSubmit || false, autoSubmit ? new Date().toISOString() : null
+      timeDecayBonus, autoSubmit || false, autoSubmit ? new Date().toISOString() : null, session.question_started_at
     ];
 
     try {
@@ -715,12 +742,14 @@ router.post('/answer', authenticateParticipant, async (req, res) => {
       totalTestCases,
       autoSubmitted: autoSubmit || false,
       submittedAt: new Date().toISOString(),
+      serverElapsedTime,
+      questionStartTime: session.question_started_at,
       timeRatio: timeTaken / question.time_limit,
       speedMultiplier: timeTaken <= question.time_limit ? Math.max(0, 1 - (timeTaken / question.time_limit)) : 0,
       message: autoSubmit
         ? 'Time expired - answer auto-submitted'
-        : (isCorrect ? 
-            `Correct answer! +${baseScore} base +${Math.round(timeBonus)} time bonus = ${scoreEarned} total` : 
+        : (isCorrect ?
+            `Correct answer! +${baseScore} base +${Math.round(timeBonus)} time bonus = ${scoreEarned} total` :
             (partialScore > 0 ? 'Partial credit awarded!' : 'Incorrect answer'))
     });
   } catch (error) {

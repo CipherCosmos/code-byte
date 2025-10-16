@@ -207,6 +207,21 @@ const GameInterface = () => {
       }
       autoSubmit();
     }
+
+    // DIAGNOSTIC: Log timer state changes
+    console.log('[CLIENT TIMER] Timer effect state', {
+      isInitializing,
+      timeLeft,
+      submitted,
+      gameState,
+      isPaused,
+      hasSocket: !!socket,
+      hasCurrentQuestion: !!currentQuestion,
+      participantId: participant?.id,
+      questionId: currentQuestion?.id,
+      timestamp: new Date().toISOString()
+    });
+
     return () => {
       if (timer) {
         clearInterval(timer);
@@ -775,7 +790,8 @@ const GameInterface = () => {
     } else {
       console.log('[CLIENT AUTOSUBMIT] Skipping auto-submit - conditions not met', {
         submitted,
-        hasCurrentQuestion: !!currentQuestion
+        hasCurrentQuestion: !!currentQuestion,
+        reason: submitted ? 'already submitted' : 'no current question'
       });
     }
   }, [submitted, currentQuestion, answer, timeLeft, gameState, isPaused, socket, participant, submitAnswer, isInitializing]);

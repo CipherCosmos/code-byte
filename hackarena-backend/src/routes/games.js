@@ -1454,11 +1454,12 @@ router.post('/:gameId/start', authenticateToken, async (req, res) => {
     );
 
     if (firstQuestion) {
-      // Create game session (no server-side time tracking)
+      // Create game session with server-side time tracking
+      const questionStartTime = new Date().toISOString();
       await db.runAsync(
         `INSERT INTO game_sessions (game_id, current_question_id, question_started_at)
-         VALUES ($1, $2, CURRENT_TIMESTAMP)`,
-        [req.params.gameId, firstQuestion.id]
+         VALUES ($1, $2, $3)`,
+        [req.params.gameId, firstQuestion.id, questionStartTime]
       );
 
       // Emit to all participants
@@ -1566,7 +1567,8 @@ router.post('/:gameId/start', authenticateToken, async (req, res) => {
             crosswordSize: parsedCrosswordSize,
             testCases: parsedTestCases,
             codeLanguages: parsedCodeLanguages
-          }
+          },
+          questionStartTime: questionStartTime
         });
       } catch (emitError) {
       }
@@ -1618,7 +1620,8 @@ router.post('/:gameId/next-question', authenticateToken, async (req, res) => {
       [nextQuestionIndex, req.params.gameId]
     );
 
-    // Create or update game session for the new question (no server-side time tracking)
+    // Create or update game session for the new question with server-side time tracking
+    const questionStartTime = new Date().toISOString();
     const existingSession = await db.getAsync('SELECT id FROM game_sessions WHERE game_id = $1', [req.params.gameId]);
 
     if (existingSession) {
@@ -1626,17 +1629,17 @@ router.post('/:gameId/next-question', authenticateToken, async (req, res) => {
       await db.runAsync(
         `UPDATE game_sessions SET
           current_question_id = $1,
-          question_started_at = CURRENT_TIMESTAMP,
+          question_started_at = $2,
           answers_revealed = FALSE
-         WHERE game_id = $2`,
-        [nextQuestion.id, req.params.gameId]
+         WHERE game_id = $3`,
+        [nextQuestion.id, questionStartTime, req.params.gameId]
       );
     } else {
       // Create new session
       await db.runAsync(
         `INSERT INTO game_sessions (game_id, current_question_id, question_started_at)
-         VALUES ($1, $2, CURRENT_TIMESTAMP)`,
-        [req.params.gameId, nextQuestion.id]
+         VALUES ($1, $2, $3)`,
+        [req.params.gameId, nextQuestion.id, questionStartTime]
       );
     }
 
@@ -1739,7 +1742,8 @@ router.post('/:gameId/next-question', authenticateToken, async (req, res) => {
           crosswordSize: parsedCrosswordSize,
           testCases: parsedTestCases,
           codeLanguages: parsedCodeLanguages
-        }
+        },
+        questionStartTime: questionStartTime
       });
     } catch (emitError) {
     }

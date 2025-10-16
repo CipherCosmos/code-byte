@@ -267,6 +267,18 @@ export function setupSocketHandlers(io) {
 
         // Get question details to determine time limit
         const question = await db.getAsync('SELECT * FROM questions WHERE id = $1', [questionId]);
+
+        // DIAGNOSTIC: Log current server time vs question timing
+        if (question) {
+          const currentTime = new Date().toISOString();
+          console.log('[SERVER SOCKET] DIAGNOSTIC - Question timing check', {
+            questionId,
+            timeLimit: question.time_limit,
+            currentServerTime: currentTime,
+            questionCreatedAt: question.created_at,
+            gameId
+          });
+        }
         if (!question) {
           console.log('[SERVER SOCKET] Question not found', { questionId });
           return;
