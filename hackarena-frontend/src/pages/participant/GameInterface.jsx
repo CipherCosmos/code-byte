@@ -190,7 +190,12 @@ const GameInterface = () => {
                   questionId: currentQuestion.id
                 });
               }
-              autoSubmit();
+              // Delay auto-submit to allow server to process the socket event first
+              setTimeout(() => {
+                if (!submitted) { // Double-check not submitted
+                  autoSubmit();
+                }
+              }, 500);
             }
             return 0;
           }
@@ -228,7 +233,12 @@ const GameInterface = () => {
               questionId: currentQuestion.id
             });
           }
-          autoSubmit();
+          // Delay auto-submit to allow server to process the socket event first
+          setTimeout(() => {
+            if (!submitted) { // Double-check not submitted
+              autoSubmit();
+            }
+          }, 500);
         }
       }
     }
@@ -497,40 +507,52 @@ const GameInterface = () => {
 
     // Game started
     socketConnection.on("gameStarted", (data) => {
-      // Only process if not initializing to prevent auto-submission on refresh
-      if (!isInitializing) {
-        setCurrentQuestion(data.question);
-        setGameState("active");
-        // Calculate remaining time from question_ends_at timestamp
-        const remainingTime = Math.max(
-          0,
-          Math.floor((new Date(data.question.question_ends_at) - new Date()) / 1000)
-        );
-        setTimeLeft(remainingTime);
-        setQuestionStartTime(new Date().toISOString());
-        setSubmitted(false);
-        // Reset answer based on question type
-        const resetAnswer = (data.question.question_type === "multiple" || data.question.question_type === "multiple_choice") ? [] : "";
-        setAnswer(resetAnswer);
-        setSelectedLanguage(data.question.code_language || "javascript");
-        setHintUsed(false);
-        setShowAnswer(false);
+      console.log('[CLIENT SOCKET] Received gameStarted event', {
+        data,
+        isInitializing,
+        currentGameState: gameState,
+        timestamp: new Date().toISOString()
+      });
 
-        // Clear any previous timer persistence and save new state
-        clearTimerPersistence();
-        saveTimerState(remainingTime, new Date().toISOString());
+      // Always process gameStarted event to ensure synchronization
+      setCurrentQuestion(data.question);
+      setGameState("active");
 
-        // Start cheat detection
-        if (cheatDetection) {
-          cheatDetection.startMonitoring();
-        }
+      // Calculate remaining time from question_ends_at timestamp
+      const remainingTime = Math.max(
+        0,
+        Math.floor((new Date(data.question.question_ends_at) - new Date()) / 1000)
+      );
+      setTimeLeft(remainingTime);
+      setQuestionStartTime(data.questionStartTime || new Date().toISOString());
+      setSubmitted(false);
 
-        toast.success("Game started! Good luck!");
+      // Reset answer based on question type
+      const resetAnswer = (data.question.question_type === "multiple" || data.question.question_type === "multiple_choice") ? [] : "";
+      setAnswer(resetAnswer);
+      setSelectedLanguage(data.question.code_language || "javascript");
+      setHintUsed(false);
+      setShowAnswer(false);
+
+      // Clear any previous timer persistence and save new state
+      clearTimerPersistence();
+      saveTimerState(remainingTime, data.questionStartTime || new Date().toISOString());
+
+      // Start cheat detection
+      if (cheatDetection) {
+        cheatDetection.startMonitoring();
       }
+
+      toast.success("Game started! Good luck!");
     });
 
     // Next question
     socketConnection.on("nextQuestion", (data) => {
+      console.log('[CLIENT SOCKET] Received nextQuestion event', {
+        data,
+        currentGameState: gameState,
+        timestamp: new Date().toISOString()
+      });
 
       setCurrentQuestion(data.question);
       // Calculate remaining time from question_ends_at timestamp
@@ -539,8 +561,9 @@ const GameInterface = () => {
         Math.floor((new Date(data.question.question_ends_at) - new Date()) / 1000)
       );
       setTimeLeft(remainingTime);
-      setQuestionStartTime(new Date().toISOString());
+      setQuestionStartTime(data.questionStartTime || new Date().toISOString());
       setSubmitted(false);
+
       // Reset answer based on question type
       const resetAnswer = (data.question.question_type === "multiple" || data.question.question_type === "multiple_choice") ? [] : "";
       setAnswer(resetAnswer);
@@ -551,7 +574,7 @@ const GameInterface = () => {
 
       // Clear previous timer persistence and save new state
       clearTimerPersistence();
-      saveTimerState(remainingTime, new Date().toISOString());
+      saveTimerState(remainingTime, data.questionStartTime || new Date().toISOString());
 
       toast("Next question!");
     });
@@ -663,7 +686,12 @@ const GameInterface = () => {
         // Only auto-submit if not already submitted
         if (!submitted) {
           console.log('[CLIENT SOCKET] Triggering auto-submit from socket event');
-          autoSubmit();
+          // Delay auto-submit to ensure server has processed all submissions
+          setTimeout(() => {
+            if (!submitted) { // Double-check not submitted during delay
+              autoSubmit();
+            }
+          }, 200);
         } else {
           console.log('[CLIENT SOCKET] Skipping auto-submit - already submitted');
         }
@@ -855,8 +883,13 @@ const GameInterface = () => {
         });
       }
 
-      console.log('[CLIENT AUTOSUBMIT] Calling submitAnswer(true)');
-      submitAnswer(true);
+      console.log('[CLIENT AUTOSUBMIT] Calling submitAnswer(true) after delay');
+      // Delay the actual submission to allow server processing
+      setTimeout(() => {
+        if (!submitted) { // Double-check not submitted during delay
+          submitAnswer(true);
+        }
+      }, 300);
     } else {
       console.log('[CLIENT AUTOSUBMIT] Skipping auto-submit - conditions not met', {
         submitted,

@@ -435,39 +435,45 @@ router.post('/answer', authenticateParticipant, async (req, res) => {
     }
 
     // Server-side time validation: Calculate elapsed time from question start
-    const questionStartTime = new Date(session.question_started_at);
+    // Ensure timestamps are parsed as UTC to avoid timezone conversion issues
+    const questionStartTime = new Date(session.question_started_at + 'Z'); // Force UTC interpretation
     const currentTime = new Date();
     const serverElapsedTime = Math.floor((currentTime - questionStartTime) / 1000); // in seconds
 
     // Check if question time has expired on server side
-    if (serverElapsedTime >= question.time_limit) {
-      // For auto-submitted answers, allow them even if slightly over time limit
+    // Allow a 5-second grace period for network latency and client-server sync issues
+    const gracePeriod = 5; // seconds
+    const effectiveTimeLimit = question.time_limit + gracePeriod;
+
+    if (serverElapsedTime >= effectiveTimeLimit) {
+      // For auto-submitted answers, allow them even if over time limit
       // This prevents issues with client-server time sync and network latency
       if (!autoSubmit) {
         return res.status(400).json({
           error: 'Question time has expired',
           serverElapsedTime,
           timeLimit: question.time_limit,
-          message: 'Your submission was received after the server-calculated time limit'
+          gracePeriod,
+          effectiveTimeLimit,
+          message: 'Your submission was received after the server-calculated time limit (including grace period)'
         });
       } else {
-        console.log(`[SERVER TIME VALIDATION] Allowing auto-submitted answer after time limit: participant ${participant.id}, question ${questionId}, server time: ${serverElapsedTime}s, limit: ${question.time_limit}s`);
+        console.log(`[SERVER TIME VALIDATION] Allowing auto-submitted answer after time limit: participant ${participant.id}, question ${questionId}, server time: ${serverElapsedTime}s, limit: ${question.time_limit}s, grace: ${gracePeriod}s`);
       }
     }
 
     // Validate client-reported time against server time (allow some tolerance for network latency)
-    const timeTolerance = 10; // Increased tolerance to 10 seconds for network issues
+    const timeTolerance = 15; // Increased tolerance to 15 seconds for network issues
     const maxAllowedTime = serverElapsedTime + timeTolerance;
 
     if (timeTaken > maxAllowedTime && !autoSubmit) {
-      console.warn(`Time validation warning: participant ${participant.id}, question ${questionId}, client time: ${timeTaken}s, server time: ${serverElapsedTime}s`);
+      console.warn(`Time validation warning: participant ${participant.id}, question ${questionId}, client time: ${timeTaken}s, server time: ${serverElapsedTime}s, max allowed: ${maxAllowedTime}s`);
       // Allow submission but log the discrepancy - don't reject to avoid false positives from network latency
     }
 
     // Calculate score with enhanced features
     let isCorrect = false;
     let scoreEarned = 0;
-    let timeBonus = 0;
     let partialScore = 0;
     let codeQualityScore = 0;
     let performanceScore = 0;
@@ -574,19 +580,30 @@ router.post('/answer', authenticateParticipant, async (req, res) => {
       correctnessScore = isCorrect ? 50 : 0; // Base score: 50 points
     }
 
-    // Calculate time-based scoring system
-    // let timeBonus = 0;
+    // Calculate time-based scoring system with server-side time control
+    // Use server-calculated elapsed time instead of client-reported time
+    let timeBonus = 0;
     let baseScore = 0;
+    let effectiveTimeTaken = timeTaken; // Default to client time
+
+    // Use server-calculated time for scoring when available and reasonable
+    if (serverElapsedTime > 0 && serverElapsedTime <= question.time_limit + 30) {
+      // Server time is reasonable, use it for scoring
+      effectiveTimeTaken = Math.min(serverElapsedTime, question.time_limit);
+    } else if (serverElapsedTime > question.time_limit + 30) {
+      // Server time is unreasonably high, use fallback
+      effectiveTimeTaken = 5; // 5-second fallback as requested
+    }
 
     // Base scoring: Correct answers get base points, incorrect get 0
     if (isCorrect && !autoSubmit) {
       baseScore = correctnessScore;
 
-      // Time-based bonus calculation
-      if (timeTaken <= question.time_limit) {
+      // Time-based bonus calculation using server-controlled time
+      if (effectiveTimeTaken <= question.time_limit) {
         // Calculate time bonus based on speed
         // Faster answers get higher bonuses
-        const timeRatio = timeTaken / question.time_limit;
+        const timeRatio = effectiveTimeTaken / question.time_limit;
         const speedMultiplier = Math.max(0, 1 - timeRatio); // 1.0 for instant, 0.0 for time limit
 
         if (question.time_decay_enabled) {

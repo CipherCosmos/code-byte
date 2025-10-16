@@ -1455,6 +1455,7 @@ router.post('/:gameId/start', authenticateToken, async (req, res) => {
 
     if (firstQuestion) {
       // Create game session with server-side time tracking
+      // Store timestamps in UTC to prevent timezone conversion issues
       const questionStartTime = new Date().toISOString();
       await db.runAsync(
         `INSERT INTO game_sessions (game_id, current_question_id, question_started_at)
@@ -1621,6 +1622,7 @@ router.post('/:gameId/next-question', authenticateToken, async (req, res) => {
     );
 
     // Create or update game session for the new question with server-side time tracking
+    // Store timestamps in UTC to prevent timezone conversion issues
     const questionStartTime = new Date().toISOString();
     const existingSession = await db.getAsync('SELECT id FROM game_sessions WHERE game_id = $1', [req.params.gameId]);
 

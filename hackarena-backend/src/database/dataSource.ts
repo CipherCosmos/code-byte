@@ -16,8 +16,8 @@ import { dirname } from 'path';
 
 // Load environment variables
 dotenv.config();
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+// Use __dirname from CommonJS context or fallback for ESM
+const __dirname_dataSource = process.cwd();
 
 export const AppDataSource = new DataSource({
   type: 'postgres',
@@ -54,10 +54,14 @@ export const AppDataSource = new DataSource({
 });
 
 // Initialize the data source with error handling
-AppDataSource.initialize()
-  .then(() => {
-  })
-  .catch((error) => {
-    console.error('❌ Database connection failed:', error.message);
-    process.exit(1); // Exit the process if the database connection fails
-  });
+// Only initialize if not in test environment
+if (process.env.NODE_ENV !== 'test') {
+  AppDataSource.initialize()
+    .then(() => {
+      console.log('✅ Database connection established');
+    })
+    .catch((error) => {
+      console.error('❌ Database connection failed:', error.message);
+      process.exit(1); // Exit the process if the database connection fails
+    });
+}

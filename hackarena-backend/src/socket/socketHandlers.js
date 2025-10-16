@@ -311,6 +311,20 @@ export function setupSocketHandlers(io) {
             'UPDATE game_sessions SET auto_submitted_at = $1 WHERE game_id = $2 AND current_question_id = $3',
             [currentTimeUTC, gameId, questionId]
           );
+  
+          // Reset auto_submitted_at after a short delay to allow for legitimate auto-submissions
+          // This prevents the flag from blocking future auto-submissions if the event is triggered multiple times
+          setTimeout(async () => {
+            try {
+              await db.runAsync(
+                'UPDATE game_sessions SET auto_submitted_at = NULL WHERE game_id = $1 AND current_question_id = $2 AND auto_submitted_at = $3',
+                [gameId, questionId, currentTimeUTC]
+              );
+              console.log('[SERVER SOCKET] Reset auto-submit flag for future submissions');
+            } catch (resetError) {
+              console.warn('[SERVER SOCKET] Failed to reset auto-submit flag:', resetError);
+            }
+          }, 2000); // Reset after 2 seconds
 
           for (const participant of unansweredParticipants) {
             console.log('[SERVER SOCKET] Auto-submitting for participant', {
