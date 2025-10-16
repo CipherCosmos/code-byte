@@ -441,21 +441,27 @@ router.post('/answer', authenticateParticipant, async (req, res) => {
 
     // Check if question time has expired on server side
     if (serverElapsedTime >= question.time_limit) {
-      return res.status(400).json({
-        error: 'Question time has expired',
-        serverElapsedTime,
-        timeLimit: question.time_limit,
-        message: 'Your submission was received after the server-calculated time limit'
-      });
+      // For auto-submitted answers, allow them even if slightly over time limit
+      // This prevents issues with client-server time sync and network latency
+      if (!autoSubmit) {
+        return res.status(400).json({
+          error: 'Question time has expired',
+          serverElapsedTime,
+          timeLimit: question.time_limit,
+          message: 'Your submission was received after the server-calculated time limit'
+        });
+      } else {
+        console.log(`[SERVER TIME VALIDATION] Allowing auto-submitted answer after time limit: participant ${participant.id}, question ${questionId}, server time: ${serverElapsedTime}s, limit: ${question.time_limit}s`);
+      }
     }
 
     // Validate client-reported time against server time (allow some tolerance for network latency)
-    const timeTolerance = 5; // 5 seconds tolerance
+    const timeTolerance = 10; // Increased tolerance to 10 seconds for network issues
     const maxAllowedTime = serverElapsedTime + timeTolerance;
 
-    if (timeTaken > maxAllowedTime) {
+    if (timeTaken > maxAllowedTime && !autoSubmit) {
       console.warn(`Time validation warning: participant ${participant.id}, question ${questionId}, client time: ${timeTaken}s, server time: ${serverElapsedTime}s`);
-      // Allow submission but log the discrepancy - don't reject to avoid false positives
+      // Allow submission but log the discrepancy - don't reject to avoid false positives from network latency
     }
 
     // Calculate score with enhanced features
@@ -571,18 +577,18 @@ router.post('/answer', authenticateParticipant, async (req, res) => {
     // Calculate time-based scoring system
     // let timeBonus = 0;
     let baseScore = 0;
-    
+
     // Base scoring: Correct answers get base points, incorrect get 0
     if (isCorrect && !autoSubmit) {
       baseScore = correctnessScore;
-      
+
       // Time-based bonus calculation
       if (timeTaken <= question.time_limit) {
         // Calculate time bonus based on speed
         // Faster answers get higher bonuses
         const timeRatio = timeTaken / question.time_limit;
         const speedMultiplier = Math.max(0, 1 - timeRatio); // 1.0 for instant, 0.0 for time limit
-        
+
         if (question.time_decay_enabled) {
           // Exponential decay: faster answers get exponentially higher scores
           const decayFactor = question.time_decay_factor || 0.1;
@@ -591,7 +597,7 @@ router.post('/answer', authenticateParticipant, async (req, res) => {
           // Linear time bonus: up to 50% bonus for very fast answers
           timeBonus = baseScore * 0.5 * speedMultiplier;
         }
-        
+
         // Ensure time bonus doesn't exceed base score
         timeBonus = Math.min(timeBonus, baseScore);
         scoreEarned = baseScore + timeBonus;
@@ -601,10 +607,16 @@ router.post('/answer', authenticateParticipant, async (req, res) => {
         timeBonus = 0;
       }
     } else if (autoSubmit) {
-      // Auto-submitted answers get no points and are marked incorrect
-      scoreEarned = 0;
-      isCorrect = false; // Override correctness for auto-submitted answers
-      timeBonus = 0;
+      // Auto-submitted answers get no points but correctness is preserved
+      // This prevents penalizing users for network issues or page refreshes
+      if (isCorrect) {
+        baseScore = correctnessScore;
+        scoreEarned = baseScore; // Give base points for correct auto-submitted answers
+        timeBonus = 0; // No time bonus for auto-submitted
+      } else {
+        scoreEarned = 0;
+        timeBonus = 0;
+      }
     } else {
       // Incorrect answers get no points
       scoreEarned = 0;

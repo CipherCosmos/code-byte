@@ -56,6 +56,7 @@ const GameInterface = () => {
   const [timeLeft, setTimeLeft] = useState(0);
   const [hintUsed, setHintUsed] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [questionStartTime, setQuestionStartTime] = useState(null);
   const [leaderboard, setLeaderboard] = useState([]);
   const [showAnswer, setShowAnswer] = useState(false);
   const [answerResult, setAnswerResult] = useState(null);
@@ -90,6 +91,8 @@ const GameInterface = () => {
       if (socket) {
         socket.disconnect();
       }
+      // Clear timer persistence on component unmount
+      clearTimerPersistence();
     };
   }, []);
 
@@ -164,25 +167,34 @@ const GameInterface = () => {
     if (!isInitializing && timeLeft > 0 && !submitted && gameState === "active" && !isPaused) {
       timer = setInterval(() => {
         setTimeLeft((prev) => {
-          if (prev <= 1) {
-            // Trigger server-side auto-submit instead of client-side
-            console.log('[CLIENT TIMER] Time expired, emitting questionTimeExpired', {
-              gameId: participant?.gameId,
-              questionId: currentQuestion?.id,
-              timeLeft: prev,
-              submitted,
-              timestamp: new Date().toISOString()
-            });
-            if (socket && currentQuestion) {
-              socket.emit('questionTimeExpired', {
+          const newTime = prev - 1;
+          // Save timer state every second
+          saveTimerState(newTime, questionStartTime);
+
+          if (newTime <= 0) {
+            // Clear timer persistence when time expires
+            clearTimerPersistence();
+
+            // Only trigger auto-submit if not already submitted
+            if (!submitted) {
+              console.log('[CLIENT TIMER] Time expired, emitting questionTimeExpired', {
                 gameId: participant?.gameId,
-                questionId: currentQuestion.id
+                questionId: currentQuestion?.id,
+                timeLeft: newTime,
+                submitted,
+                timestamp: new Date().toISOString()
               });
+              if (socket && currentQuestion) {
+                socket.emit('questionTimeExpired', {
+                  gameId: participant?.gameId,
+                  questionId: currentQuestion.id
+                });
+              }
+              autoSubmit();
             }
-            autoSubmit();
             return 0;
           }
-          return prev - 1;
+          return newTime;
         });
       }, 1000);
     } else if (
@@ -193,19 +205,32 @@ const GameInterface = () => {
       !isPaused
     ) {
       // Additional check in case timer wasn't running but time is 0
-      console.log('[CLIENT TIMER] Additional auto-submit check triggered', {
-        gameId: participant?.gameId,
-        questionId: currentQuestion?.id,
-        submitted,
-        timestamp: new Date().toISOString()
-      });
-      if (socket && currentQuestion) {
-        socket.emit('questionTimeExpired', {
-          gameId: participant?.gameId,
-          questionId: currentQuestion.id
-        });
+      // Check if we have persisted timer state indicating this might be a page refresh scenario
+      const persistedTimer = loadTimerState();
+      if (persistedTimer && persistedTimer.timeLeft > 0) {
+        console.log('[CLIENT TIMER] Skipping auto-submit on timer reset - likely page refresh with persisted state');
+        // Don't clear persistence here, let the server sync handle it
+      } else {
+        // Only trigger auto-submit if not already submitted
+        if (!submitted) {
+          // Clear timer persistence since time has actually expired
+          clearTimerPersistence();
+
+          console.log('[CLIENT TIMER] Additional auto-submit check triggered', {
+            gameId: participant?.gameId,
+            questionId: currentQuestion?.id,
+            submitted,
+            timestamp: new Date().toISOString()
+          });
+          if (socket && currentQuestion) {
+            socket.emit('questionTimeExpired', {
+              gameId: participant?.gameId,
+              questionId: currentQuestion.id
+            });
+          }
+          autoSubmit();
+        }
       }
-      autoSubmit();
     }
 
     // DIAGNOSTIC: Log timer state changes
@@ -227,7 +252,7 @@ const GameInterface = () => {
         clearInterval(timer);
       }
     };
-  }, [timeLeft, submitted, gameState, isPaused, socket, currentQuestion, participant, isInitializing]);
+  }, [timeLeft, submitted, gameState, isPaused, socket, currentQuestion, participant, isInitializing, questionStartTime]);
 
   const initializeGame = useCallback(async () => {
     try {
@@ -410,19 +435,33 @@ const GameInterface = () => {
             setShowAnswer(true);
             setSubmitted(true); // Mark as submitted since answer is revealed
             setTimeLeft(0); // Ensure timer shows 0 when answers are revealed
+            clearTimerPersistence(); // Clear any persisted timer state
           } else {
-            // Calculate time left based on server timestamp only if answers not revealed
-            const serverTimeLeft = Math.max(
-              0,
-              Math.floor(
-                (new Date(activeQuestion.question_ends_at) - new Date()) / 1000
-              )
-            );
-            setTimeLeft(serverTimeLeft);
+            // Try to load persisted timer state first
+            const persistedTimer = loadTimerState();
+            if (persistedTimer && persistedTimer.timeLeft > 0) {
+              // Use persisted timer state
+              setTimeLeft(persistedTimer.timeLeft);
+              setQuestionStartTime(persistedTimer.startTime);
+              console.log('[TIMER PERSISTENCE] Restored timer from localStorage:', persistedTimer);
+            } else {
+              // Calculate time left based on server timestamp
+              const serverTimeLeft = Math.max(
+                0,
+                Math.floor(
+                  (new Date(activeQuestion.question_ends_at) - new Date()) / 1000
+                )
+              );
+              setTimeLeft(serverTimeLeft);
+              setQuestionStartTime(new Date().toISOString());
+              // Save initial timer state
+              saveTimerState(serverTimeLeft, new Date().toISOString());
+            }
           }
         } else if (updatedParticipant.gameStatus === "completed") {
           setGameState("ended");
           fetchAnalytics();
+          clearTimerPersistence(); // Clear timer persistence when game ends
         } else if (updatedParticipant.gameStatus === "active") {
           // Game is active but no question sent - participant should receive current question
         } else {
@@ -462,8 +501,13 @@ const GameInterface = () => {
       if (!isInitializing) {
         setCurrentQuestion(data.question);
         setGameState("active");
-        // Timer starts counting down from the assigned time when organizer begins question
-        setTimeLeft(data.question.time_limit);
+        // Calculate remaining time from question_ends_at timestamp
+        const remainingTime = Math.max(
+          0,
+          Math.floor((new Date(data.question.question_ends_at) - new Date()) / 1000)
+        );
+        setTimeLeft(remainingTime);
+        setQuestionStartTime(new Date().toISOString());
         setSubmitted(false);
         // Reset answer based on question type
         const resetAnswer = (data.question.question_type === "multiple" || data.question.question_type === "multiple_choice") ? [] : "";
@@ -471,6 +515,10 @@ const GameInterface = () => {
         setSelectedLanguage(data.question.code_language || "javascript");
         setHintUsed(false);
         setShowAnswer(false);
+
+        // Clear any previous timer persistence and save new state
+        clearTimerPersistence();
+        saveTimerState(remainingTime, new Date().toISOString());
 
         // Start cheat detection
         if (cheatDetection) {
@@ -485,8 +533,13 @@ const GameInterface = () => {
     socketConnection.on("nextQuestion", (data) => {
 
       setCurrentQuestion(data.question);
-      // Timer starts counting down from the assigned time when organizer begins next question
-      setTimeLeft(data.question.time_limit);
+      // Calculate remaining time from question_ends_at timestamp
+      const remainingTime = Math.max(
+        0,
+        Math.floor((new Date(data.question.question_ends_at) - new Date()) / 1000)
+      );
+      setTimeLeft(remainingTime);
+      setQuestionStartTime(new Date().toISOString());
       setSubmitted(false);
       // Reset answer based on question type
       const resetAnswer = (data.question.question_type === "multiple" || data.question.question_type === "multiple_choice") ? [] : "";
@@ -496,6 +549,9 @@ const GameInterface = () => {
       setShowAnswer(false);
       setAnswerResult(null);
 
+      // Clear previous timer persistence and save new state
+      clearTimerPersistence();
+      saveTimerState(remainingTime, new Date().toISOString());
 
       toast("Next question!");
     });
@@ -541,6 +597,7 @@ const GameInterface = () => {
         cheatDetection.stopMonitoring();
       }
       fetchAnalytics();
+      clearTimerPersistence(); // Clear timer persistence when game ends
       toast.success("Game completed!");
     });
 
@@ -599,6 +656,9 @@ const GameInterface = () => {
       if (!isInitializing) {
         // Force timer to zero for visual synchronization
         setTimeLeft(0);
+
+        // Clear timer persistence since time has expired
+        clearTimerPersistence();
 
         // Only auto-submit if not already submitted
         if (!submitted) {
@@ -693,6 +753,9 @@ const GameInterface = () => {
         setSubmitted(true);
         setAnswerResult(response.data);
 
+        // Clear timer persistence when answer is submitted
+        clearTimerPersistence();
+
         if (response.data.isCorrect) {
           toast.success(`🎉 Correct! +${response.data.scoreEarned} points`, {
             duration: 4000,
@@ -773,6 +836,13 @@ const GameInterface = () => {
       return;
     }
 
+    // Prevent auto-submit if timer was reset to 0 due to page refresh and we have persisted state
+    const persistedTimer = loadTimerState();
+    if (timeLeft === 0 && persistedTimer && persistedTimer.timeLeft > 0) {
+      console.log('[CLIENT AUTOSUBMIT] Skipping auto-submit - timer was reset due to page refresh, waiting for server sync');
+      return;
+    }
+
     if (!submitted && currentQuestion) {
       // Force submit with current answer (can be empty)
 
@@ -825,6 +895,77 @@ const GameInterface = () => {
   const validateLanguage = (lang) => {
     const validLanguages = ["javascript", "python", "java", "cpp"];
     return validLanguages.includes(lang) ? lang : "javascript";
+  };
+
+  // Timer persistence functions
+  const getTimerKey = () => {
+    if (!participant?.id || !currentQuestion?.id) return null;
+    return `hackarena_timer_${participant.id}_${currentQuestion.id}`;
+  };
+
+  const saveTimerState = (timeLeft, startTime) => {
+    const key = getTimerKey();
+    if (!key) return;
+
+    const timerData = {
+      timeLeft,
+      startTime: startTime || questionStartTime,
+      questionId: currentQuestion.id,
+      participantId: participant.id,
+      savedAt: new Date().toISOString()
+    };
+
+    try {
+      localStorage.setItem(key, JSON.stringify(timerData));
+      console.log('[TIMER PERSISTENCE] Saved timer state:', timerData);
+    } catch (error) {
+      console.warn('[TIMER PERSISTENCE] Failed to save timer state:', error);
+    }
+  };
+
+  const loadTimerState = () => {
+    const key = getTimerKey();
+    if (!key) return null;
+
+    try {
+      const saved = localStorage.getItem(key);
+      if (!saved) return null;
+
+      const timerData = JSON.parse(saved);
+      const savedTime = new Date(timerData.savedAt);
+      const now = new Date();
+      const elapsedSinceSave = Math.floor((now - savedTime) / 1000);
+
+      // Calculate remaining time based on elapsed time since save
+      const remainingTime = Math.max(0, timerData.timeLeft - elapsedSinceSave);
+
+      console.log('[TIMER PERSISTENCE] Loaded timer state:', {
+        saved: timerData,
+        elapsedSinceSave,
+        remainingTime,
+        now: now.toISOString()
+      });
+
+      return {
+        timeLeft: remainingTime,
+        startTime: timerData.startTime
+      };
+    } catch (error) {
+      console.warn('[TIMER PERSISTENCE] Failed to load timer state:', error);
+      return null;
+    }
+  };
+
+  const clearTimerPersistence = () => {
+    const key = getTimerKey();
+    if (key) {
+      try {
+        localStorage.removeItem(key);
+        console.log('[TIMER PERSISTENCE] Cleared timer state for key:', key);
+      } catch (error) {
+        console.warn('[TIMER PERSISTENCE] Failed to clear timer state:', error);
+      }
+    }
   };
 
   const getLanguageOptions = () => [
