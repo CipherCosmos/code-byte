@@ -1,6 +1,6 @@
 import { io } from 'socket.io-client'
 
-const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001'
+const BASE_URL = import.meta.env.VITE_API_URL || 'https://code-byte-1.onrender.com'
 
 class SocketManager {
   constructor() {
